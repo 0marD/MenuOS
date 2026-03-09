@@ -13,6 +13,13 @@ export * from './molecules/OrderCard';
 export * from './molecules/CustomerRow';
 export * from './molecules/StampCard';
 
+// Organisms
+export * from './organisms/AlertBanner';
+
+// Templates
+export * from './templates/AdminLayout';
+export * from './templates/CustomerLayout';
+
 // Tokens
 export * from './tokens';
 
