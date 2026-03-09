@@ -78,9 +78,27 @@ export default async function DashboardPage() {
     0
   );
 
+  const isNew = (categoriesResult.count ?? 0) === 0;
+
   return (
     <div>
       <h1 className="mb-6 font-display text-2xl font-bold text-ink">Dashboard</h1>
+
+      {/* Onboarding banner for new restaurants */}
+      {isNew && (
+        <Link
+          href="/admin/onboarding"
+          className="mb-6 flex items-center gap-4 rounded-xl border-2 border-accent bg-accent/5 px-5 py-4 transition hover:bg-accent/10"
+        >
+          <span className="text-2xl shrink-0" aria-hidden="true">🚀</span>
+          <div className="flex-1">
+            <p className="font-sans font-medium text-ink">Completa la configuración inicial</p>
+            <p className="text-sm font-sans text-muted">Tu menú aún está vacío. Sigue la guía en 15 minutos.</p>
+          </div>
+          <span className="text-xs font-mono text-accent font-medium">Ver guía →</span>
+        </Link>
+      )}
+
       <DashboardMetrics
         categoryCount={categoriesResult.count ?? 0}
         itemCount={itemsResult.count ?? 0}

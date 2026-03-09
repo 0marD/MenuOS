@@ -11,6 +11,7 @@ import {
   QrCode,
   ShoppingBag,
   Gift,
+  Grid3x3,
 } from 'lucide-react';
 import { cn } from '@menuos/ui';
 
@@ -18,6 +19,7 @@ const navItems = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/menu', label: 'Menú', icon: UtensilsCrossed },
   { href: '/admin/orders', label: 'Pedidos', icon: ShoppingBag },
+  { href: '/admin/orders/tables', label: 'Mesas', icon: Grid3x3 },
   { href: '/admin/crm', label: 'Clientes', icon: Users },
   { href: '/admin/campaigns', label: 'Campañas', icon: MessageCircle },
   { href: '/admin/loyalty', label: 'Fidelidad', icon: Gift },
@@ -38,7 +40,7 @@ export function AdminSidebar() {
       </div>
       <ul className="flex flex-1 flex-col gap-0.5 p-2" role="list">
         {navItems.map(({ href, label, icon: Icon }) => {
-          const isActive = pathname.startsWith(href);
+          const isActive = pathname === href || (href !== '/admin/dashboard' && pathname.startsWith(href));
           return (
             <li key={href}>
               <Link
