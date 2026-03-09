@@ -432,6 +432,150 @@ export type Database = {
         Update: Partial<Database['public']['Tables']['audit_log']['Insert']>;
         Relationships: [];
       };
+      customers: {
+        Row: {
+          id: string;
+          created_at: string;
+          updated_at: string;
+          organization_id: string;
+          name: string;
+          phone_encrypted: string;
+          phone_last4: string;
+          segment: 'new' | 'frequent' | 'dormant';
+          visit_count: number;
+          last_visit_at: string | null;
+          birthday: string | null;
+          notes: string | null;
+          is_opted_in: boolean;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+          organization_id: string;
+          name: string;
+          phone_encrypted: string;
+          phone_last4: string;
+          segment?: 'new' | 'frequent' | 'dormant';
+          visit_count?: number;
+          last_visit_at?: string | null;
+          birthday?: string | null;
+          notes?: string | null;
+          is_opted_in?: boolean;
+          deleted_at?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['customers']['Insert']>;
+        Relationships: [
+          {
+            foreignKeyName: 'customers_organization_id_fkey';
+            columns: ['organization_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      customer_visits: {
+        Row: {
+          id: string;
+          customer_id: string;
+          organization_id: string;
+          branch_id: string | null;
+          visited_at: string;
+        };
+        Insert: {
+          id?: string;
+          customer_id: string;
+          organization_id: string;
+          branch_id?: string | null;
+          visited_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['customer_visits']['Insert']>;
+        Relationships: [
+          {
+            foreignKeyName: 'customer_visits_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'customers';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      customer_consents: {
+        Row: {
+          id: string;
+          created_at: string;
+          customer_id: string;
+          consent_type: 'marketing' | 'data_processing';
+          granted: boolean;
+          ip_address: string | null;
+        };
+        Insert: {
+          id?: string;
+          created_at?: string;
+          customer_id: string;
+          consent_type: 'marketing' | 'data_processing';
+          granted: boolean;
+          ip_address?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['customer_consents']['Insert']>;
+        Relationships: [
+          {
+            foreignKeyName: 'customer_consents_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'customers';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
+      campaigns: {
+        Row: {
+          id: string;
+          created_at: string;
+          updated_at: string;
+          organization_id: string;
+          name: string;
+          template_id: string | null;
+          template_variables: Json | null;
+          segment: 'all' | 'new' | 'frequent' | 'dormant' | null;
+          status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
+          scheduled_at: string | null;
+          sent_at: string | null;
+          total_sent: number;
+          total_delivered: number;
+          total_read: number;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+          organization_id: string;
+          name: string;
+          template_id?: string | null;
+          template_variables?: Json | null;
+          segment?: 'all' | 'new' | 'frequent' | 'dormant' | null;
+          status?: 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
+          scheduled_at?: string | null;
+          sent_at?: string | null;
+          total_sent?: number;
+          total_delivered?: number;
+          total_read?: number;
+          deleted_at?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['campaigns']['Insert']>;
+        Relationships: [
+          {
+            foreignKeyName: 'campaigns_organization_id_fkey';
+            columns: ['organization_id'];
+            isOneToOne: false;
+            referencedRelation: 'organizations';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
     };
     Views: Record<string, {
       Row: Record<string, unknown>;

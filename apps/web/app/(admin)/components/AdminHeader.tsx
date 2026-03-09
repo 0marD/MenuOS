@@ -8,12 +8,12 @@ import { logout } from '@/lib/auth/actions';
 
 interface AdminHeaderProps {
   user: User;
+  staffName?: string;
 }
 
-export function AdminHeader({ user }: AdminHeaderProps) {
-  const initials = (user.email ?? 'U')
-    .substring(0, 2)
-    .toUpperCase();
+export function AdminHeader({ user, staffName }: AdminHeaderProps) {
+  const displayName = staffName ?? user.email ?? 'Usuario';
+  const initials = displayName.substring(0, 2).toUpperCase();
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-rule bg-cream px-4">
@@ -25,7 +25,7 @@ export function AdminHeader({ user }: AdminHeaderProps) {
         <Avatar className="h-8 w-8">
           <AvatarFallback className="text-xs">{initials}</AvatarFallback>
         </Avatar>
-        <span className="hidden text-xs font-sans text-muted md:block">{user.email}</span>
+        <span className="hidden text-xs font-sans text-muted md:block">{displayName}</span>
         <form action={logout}>
           <Button
             type="submit"

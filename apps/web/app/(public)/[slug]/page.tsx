@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { createClient } from '@/lib/supabase/server';
 import { CustomerMenuView } from './components/CustomerMenuView';
+import { CustomerRegistrationSheet } from './components/CustomerRegistrationSheet';
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -52,9 +53,9 @@ export default async function PublicMenuPage({ params }: PageProps) {
     .order('sort_order', { referencedTable: 'menu_items' });
 
   return (
-    <CustomerMenuView
-      org={org}
-      categories={categories ?? []}
-    />
+    <>
+      <CustomerMenuView org={org} categories={categories ?? []} />
+      <CustomerRegistrationSheet orgId={org.id} orgName={org.name} />
+    </>
   );
 }
