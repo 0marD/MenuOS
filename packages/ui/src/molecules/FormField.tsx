@@ -5,8 +5,8 @@ import { Input, type InputProps } from '../atoms/Input';
 
 interface FormFieldProps extends InputProps {
   label: string;
-  error?: string;
-  hint?: string;
+  error?: string | undefined;
+  hint?: string | undefined;
   required?: boolean;
 }
 

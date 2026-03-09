@@ -11,28 +11,30 @@
     "clean": "rm -rf .next dist"
   },
   "dependencies": {
-    "@menuos/ui": "workspace:*",
-    "@menuos/shared": "workspace:*",
+    "@hookform/resolvers": "^3.9.1",
     "@menuos/database": "workspace:*",
-    "@supabase/supabase-js": "^2.48.1",
-    "@supabase/ssr": "^0.5.2",
+    "@menuos/shared": "workspace:*",
+    "@menuos/ui": "workspace:*",
+    "@supabase/ssr": "^0.9.0",
+    "@supabase/supabase-js": "^2.99.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.469.0",
     "next": "^15.1.6",
+    "next-intl": "^3.26.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "next-intl": "^3.26.3",
-    "zod": "^3.24.1",
     "react-hook-form": "^7.54.2",
-    "@hookform/resolvers": "^3.9.1",
-    "clsx": "^2.1.1",
-    "tailwind-merge": "^2.6.0"
+    "tailwind-merge": "^2.6.0",
+    "tailwindcss": "^4.2.1",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@menuos/config": "workspace:*",
     "@types/node": "^22.10.6",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
-    "typescript": "^5.7.3",
     "eslint": "^9.18.0",
-    "eslint-config-next": "^15.1.6"
+    "eslint-config-next": "^15.1.6",
+    "typescript": "^5.7.3"
   }
 }

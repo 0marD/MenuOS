@@ -1,15 +1,17 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
 import { Button } from '@menuos/ui/atoms/Button';
 import { FormField } from '@menuos/ui/molecules/FormField';
 import { loginSchema, type LoginInput } from '@menuos/shared/validations';
+import { login } from '@/lib/auth/actions';
 
 export function LoginForm() {
   const [isPending, startTransition] = useTransition();
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const {
     register,
@@ -20,14 +22,22 @@ export function LoginForm() {
   });
 
   function onSubmit(data: LoginInput) {
+    setServerError(null);
     startTransition(async () => {
-      // TODO: implement Supabase auth
-      console.warn('Login:', data.email);
+      const result = await login(data);
+      if (result?.error) {
+        setServerError(result.error);
+      }
     });
   }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
+      {serverError && (
+        <div role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {serverError}
+        </div>
+      )}
       <FormField
         label="Email"
         type="email"
@@ -37,7 +47,7 @@ export function LoginForm() {
         {...register('email')}
       />
       <FormField
-        label="Contrase\u00f1a"
+        label="Contraseña"
         type="password"
         autoComplete="current-password"
         required
@@ -45,17 +55,17 @@ export function LoginForm() {
         {...register('password')}
       />
       <Button type="submit" disabled={isPending} className="mt-2 w-full">
-        {isPending ? 'Ingresando...' : 'Iniciar sesi\u00f3n'}
+        {isPending ? 'Ingresando...' : 'Iniciar sesión'}
       </Button>
       <p className="text-center text-xs font-sans text-muted">
         <Link href="/auth/forgot-password" className="text-accent hover:underline">
-          \u00bfOlvidaste tu contrase\u00f1a?
+          ¿Olvidaste tu contraseña?
         </Link>
       </p>
       <p className="text-center text-xs font-sans text-muted">
-        \u00bfNo tienes cuenta?{' '}
+        ¿No tienes cuenta?{' '}
         <Link href="/auth/register" className="text-accent hover:underline">
-          Reg\u00edstrate gratis
+          Regístrate gratis
         </Link>
       </p>
     </form>
