@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Playfair_Display, DM_Sans, DM_Mono } from 'next/font/google';
 import './globals.css';
+import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar';
 
 const playfair = Playfair_Display({
   subsets: ['latin'],
@@ -23,14 +24,14 @@ const dmMono = DM_Mono({
 
 export const metadata: Metadata = {
   title: 'MenuOS',
-  description: 'Sistema de gesti\u00f3n para restaurantes independientes',
-  manifest: '/site.webmanifest',
+  description: 'Sistema de gestión para restaurantes independientes',
+  manifest: '/manifest.webmanifest',
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#D4500A',
+  themeColor: '#0F0E0C',
 };
 
 export default function RootLayout({
@@ -40,10 +41,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es" suppressHydrationWarning>
-      <body
-        className={`${playfair.variable} ${dmSans.variable} ${dmMono.variable}`}
-      >
+      <body className={`${playfair.variable} ${dmSans.variable} ${dmMono.variable}`}>
         {children}
+        <ServiceWorkerRegistrar />
       </body>
     </html>
   );

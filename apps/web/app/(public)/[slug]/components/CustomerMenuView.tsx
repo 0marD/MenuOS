@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { Search, X } from 'lucide-react';
 import { cn } from '@menuos/ui';
 import { MenuItemCard } from '@menuos/ui/molecules/MenuItemCard';
+import { useMenuRealtime } from './useMenuRealtime';
+import { MenuUpdateToast } from './MenuUpdateToast';
 
 interface MenuItemPhoto { url: string; position: number }
 interface MenuItemFilter { filter: string }
@@ -39,10 +42,24 @@ interface CustomerMenuViewProps {
 }
 
 export function CustomerMenuView({ org, categories }: CustomerMenuViewProps) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
   const [activeCategory, setActiveCategory] = useState<string | null>(
     categories[0]?.id ?? null
   );
   const [searchQuery, setSearchQuery] = useState('');
+  const [hasUpdate, setHasUpdate] = useState(false);
+
+  const handleMenuUpdate = useCallback(() => {
+    setHasUpdate(true);
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    setHasUpdate(false);
+    startTransition(() => router.refresh());
+  }, [router]);
+
+  useMenuRealtime(org.id, handleMenuUpdate);
 
   const filteredCategories = useMemo(() => {
     if (!searchQuery.trim()) return categories;
@@ -170,6 +187,8 @@ export function CustomerMenuView({ org, categories }: CustomerMenuViewProps) {
           ))
         )}
       </main>
+
+      <MenuUpdateToast visible={hasUpdate} onRefresh={handleRefresh} />
     </div>
   );
 }
