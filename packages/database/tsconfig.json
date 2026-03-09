@@ -1,0 +1,8 @@
+{
+  "extends": "@menuos/config/typescript/base",
+  "compilerOptions": {
+    "baseUrl": "."
+  },
+  "include": ["types/**/*.ts"],
+  "exclude": ["node_modules"]
+}

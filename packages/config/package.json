@@ -1,0 +1,16 @@
+{
+  "name": "@menuos/config",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    "./eslint": "./eslint.config.js",
+    "./typescript/base": "./typescript/base.json",
+    "./typescript/nextjs": "./typescript/nextjs.json",
+    "./tailwind": "./tailwind.config.ts"
+  },
+  "dependencies": {
+    "@eslint/eslintrc": "^3.2.0",
+    "eslint-config-next": "^15.1.6",
+    "typescript-eslint": "^8.20.0"
+  }
+}
