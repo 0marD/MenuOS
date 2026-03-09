@@ -6,6 +6,7 @@ import { CustomerRegistrationSheet } from './components/CustomerRegistrationShee
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ table?: string }>;
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -23,8 +24,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-export default async function PublicMenuPage({ params }: PageProps) {
+export default async function PublicMenuPage({ params, searchParams }: PageProps) {
   const { slug } = await params;
+  const { table: tableToken } = await searchParams;
+
   const supabase = await createClient();
 
   const { data: org } = await supabase
@@ -35,6 +38,29 @@ export default async function PublicMenuPage({ params }: PageProps) {
     .single();
 
   if (!org) notFound();
+
+  // Get first active branch for this org (multi-branch: resolve by table token)
+  const { data: branch } = await supabase
+    .from('branches')
+    .select('id')
+    .eq('organization_id', org.id)
+    .eq('is_active', true)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .single();
+
+  // Resolve table info if QR token provided
+  let tableNumber: number | undefined;
+  if (tableToken) {
+    const { data: table } = await supabase
+      .from('restaurant_tables')
+      .select('number')
+      .eq('qr_token', tableToken)
+      .eq('is_active', true)
+      .single();
+    if (table) tableNumber = table.number;
+  }
 
   const { data: categories } = await supabase
     .from('menu_categories')
@@ -54,7 +80,13 @@ export default async function PublicMenuPage({ params }: PageProps) {
 
   return (
     <>
-      <CustomerMenuView org={org} categories={categories ?? []} />
+      <CustomerMenuView
+        org={org}
+        branchId={branch?.id ?? ''}
+        categories={categories ?? []}
+        {...(tableToken !== undefined ? { tableToken } : {})}
+        {...(tableNumber !== undefined ? { tableNumber } : {})}
+      />
       <CustomerRegistrationSheet orgId={org.id} orgName={org.name} />
     </>
   );

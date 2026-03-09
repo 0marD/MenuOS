@@ -7,6 +7,8 @@ import { cn } from '@menuos/ui';
 import { MenuItemCard } from '@menuos/ui/molecules/MenuItemCard';
 import { useMenuRealtime } from './useMenuRealtime';
 import { MenuUpdateToast } from './MenuUpdateToast';
+import { useCartStore } from '../cart/CartStore';
+import { CartSheet } from '../cart/CartSheet';
 
 interface MenuItemPhoto { url: string; position: number }
 interface MenuItemFilter { filter: string }
@@ -38,10 +40,13 @@ interface Org {
 
 interface CustomerMenuViewProps {
   org: Org;
+  branchId: string;
   categories: Category[];
+  tableToken?: string;
+  tableNumber?: number;
 }
 
-export function CustomerMenuView({ org, categories }: CustomerMenuViewProps) {
+export function CustomerMenuView({ org, branchId, categories, tableToken, tableNumber }: CustomerMenuViewProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [activeCategory, setActiveCategory] = useState<string | null>(
@@ -49,6 +54,7 @@ export function CustomerMenuView({ org, categories }: CustomerMenuViewProps) {
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [hasUpdate, setHasUpdate] = useState(false);
+  const { addItem } = useCartStore();
 
   const handleMenuUpdate = useCallback(() => {
     setHasUpdate(true);
@@ -180,6 +186,7 @@ export function CustomerMenuView({ org, categories }: CustomerMenuViewProps) {
                     {...(item.menu_item_photos[0]?.url ? { imageUrl: item.menu_item_photos[0].url } : {})}
                     isSoldOut={item.is_sold_out_today}
                     filters={item.menu_item_filters.map((f) => f.filter)}
+                    {...(!item.is_sold_out_today ? { onSelect: () => addItem({ id: item.id, name: item.name, price: Number(item.price) }) } : {})}
                   />
                 ))}
               </div>
@@ -189,6 +196,13 @@ export function CustomerMenuView({ org, categories }: CustomerMenuViewProps) {
       </main>
 
       <MenuUpdateToast visible={hasUpdate} onRefresh={handleRefresh} />
+      <CartSheet
+        slug={org.slug}
+        orgId={org.id}
+        branchId={branchId}
+        {...(tableToken !== undefined ? { tableToken } : {})}
+        {...(tableNumber !== undefined ? { tableNumber } : {})}
+      />
     </div>
   );
 }

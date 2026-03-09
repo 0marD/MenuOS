@@ -530,6 +530,128 @@ export type Database = {
           }
         ];
       };
+      restaurant_tables: {
+        Row: {
+          id: string;
+          organization_id: string;
+          branch_id: string;
+          number: number;
+          label: string | null;
+          zone: string | null;
+          capacity: number | null;
+          is_active: boolean;
+          qr_token: string | null;
+          deleted_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          branch_id: string;
+          number: number;
+          label?: string | null;
+          zone?: string | null;
+          capacity?: number | null;
+          is_active?: boolean;
+          qr_token?: string | null;
+          deleted_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['restaurant_tables']['Insert']>;
+        Relationships: [];
+      };
+      orders: {
+        Row: {
+          id: string;
+          organization_id: string;
+          branch_id: string;
+          table_id: string | null;
+          table_number: number | null;
+          status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+          notes: string | null;
+          total: number;
+          customer_name: string | null;
+          round: number;
+          confirmed_by: string | null;
+          confirmed_at: string | null;
+          ready_at: string | null;
+          delivered_at: string | null;
+          cancelled_at: string | null;
+          cancel_reason: string | null;
+          deleted_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          branch_id: string;
+          table_id?: string | null;
+          table_number?: number | null;
+          status?: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+          notes?: string | null;
+          total?: number;
+          customer_name?: string | null;
+          round?: number;
+          confirmed_by?: string | null;
+          confirmed_at?: string | null;
+          ready_at?: string | null;
+          delivered_at?: string | null;
+          cancelled_at?: string | null;
+          cancel_reason?: string | null;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['orders']['Insert']>;
+        Relationships: [];
+      };
+      order_items: {
+        Row: {
+          id: string;
+          order_id: string;
+          menu_item_id: string;
+          name: string;
+          price: number;
+          quantity: number;
+          notes: string | null;
+          is_ready: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          order_id: string;
+          menu_item_id: string;
+          name: string;
+          price: number;
+          quantity?: number;
+          notes?: string | null;
+          is_ready?: boolean;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['order_items']['Insert']>;
+        Relationships: [];
+      };
+      order_status_history: {
+        Row: {
+          id: string;
+          order_id: string;
+          status: string;
+          changed_by: string | null;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          order_id: string;
+          status: string;
+          changed_by?: string | null;
+          note?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['order_status_history']['Insert']>;
+        Relationships: [];
+      };
       loyalty_programs: {
         Row: {
           id: string;
