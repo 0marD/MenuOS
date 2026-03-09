@@ -530,6 +530,106 @@ export type Database = {
           }
         ];
       };
+      loyalty_programs: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          stamps_required: number;
+          reward_type: 'free_item' | 'discount' | 'custom';
+          reward_value: string;
+          expiration_days: number | null;
+          is_active: boolean;
+          deleted_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          name: string;
+          stamps_required?: number;
+          reward_type: 'free_item' | 'discount' | 'custom';
+          reward_value: string;
+          expiration_days?: number | null;
+          is_active?: boolean;
+          deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['loyalty_programs']['Insert']>;
+        Relationships: [];
+      };
+      stamp_cards: {
+        Row: {
+          id: string;
+          program_id: string;
+          customer_id: string;
+          organization_id: string;
+          stamp_count: number;
+          is_complete: boolean;
+          completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          program_id: string;
+          customer_id: string;
+          organization_id: string;
+          stamp_count?: number;
+          is_complete?: boolean;
+          completed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['stamp_cards']['Insert']>;
+        Relationships: [];
+      };
+      stamps: {
+        Row: {
+          id: string;
+          stamp_card_id: string;
+          customer_id: string;
+          branch_id: string | null;
+          granted_by: string | null;
+          stamped_at: string;
+        };
+        Insert: {
+          id?: string;
+          stamp_card_id: string;
+          customer_id: string;
+          branch_id?: string | null;
+          granted_by?: string | null;
+          stamped_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['stamps']['Insert']>;
+        Relationships: [];
+      };
+      rewards: {
+        Row: {
+          id: string;
+          stamp_card_id: string;
+          customer_id: string;
+          organization_id: string;
+          code: string;
+          redeemed_at: string | null;
+          expires_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          stamp_card_id: string;
+          customer_id: string;
+          organization_id: string;
+          code: string;
+          redeemed_at?: string | null;
+          expires_at?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['rewards']['Insert']>;
+        Relationships: [];
+      };
       branch_schedules: {
         Row: {
           id: string;
