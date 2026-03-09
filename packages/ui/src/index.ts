@@ -3,6 +3,7 @@ export * from './atoms/Button';
 export * from './atoms/Input';
 export * from './atoms/Badge';
 export * from './atoms/Toggle';
+export * from './atoms/Switch';
 export * from './atoms/Avatar';
 export * from './atoms/Spinner';
 

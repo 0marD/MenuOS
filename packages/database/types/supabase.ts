@@ -530,6 +530,40 @@ export type Database = {
           }
         ];
       };
+      branch_schedules: {
+        Row: {
+          id: string;
+          branch_id: string;
+          organization_id: string;
+          day_of_week: number;
+          opens_at: string;
+          closes_at: string;
+          is_open: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          branch_id: string;
+          organization_id: string;
+          day_of_week: number;
+          opens_at: string;
+          closes_at: string;
+          is_open?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['branch_schedules']['Insert']>;
+        Relationships: [
+          {
+            foreignKeyName: 'branch_schedules_branch_id_fkey';
+            columns: ['branch_id'];
+            isOneToOne: false;
+            referencedRelation: 'branches';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
       campaigns: {
         Row: {
           id: string;
