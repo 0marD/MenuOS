@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Playfair_Display, DM_Sans, DM_Mono } from 'next/font/google';
 import './globals.css';
 import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar';
+import { PostHogProvider } from '@/components/PostHogProvider';
 
 const playfair = Playfair_Display({
   subsets: ['latin'],
@@ -42,7 +43,9 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <body className={`${playfair.variable} ${dmSans.variable} ${dmMono.variable}`}>
-        {children}
+        <PostHogProvider>
+          {children}
+        </PostHogProvider>
         <ServiceWorkerRegistrar />
       </body>
     </html>
