@@ -25,7 +25,6 @@ export default withSentryConfig(config, {
   project: process.env.SENTRY_PROJECT ?? '',
   authToken: process.env.SENTRY_AUTH_TOKEN ?? '',
   silent: true,
-  disableLogger: true,
   tunnelRoute: '/monitoring-tunnel',
   sourcemaps: {
     disable: process.env.NODE_ENV !== 'production',
