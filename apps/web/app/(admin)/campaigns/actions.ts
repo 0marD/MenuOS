@@ -3,16 +3,22 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { campaignSchema, type CampaignInput } from '@menuos/shared/validations';
+import { requireOrgSession, requireAuthSession } from '@/lib/auth/get-session';
 
 export async function createCampaign(
   orgId: string,
   data: CampaignInput
 ): Promise<{ success: boolean; error?: string; id?: string }> {
+  try {
+    await requireOrgSession(orgId);
+  } catch {
+    return { success: false, error: 'Sin autorización' };
+  }
+
   const parsed = campaignSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: 'Datos inválidos' };
 
   const supabase = await createClient();
-
   const status = parsed.data.scheduled_at ? 'scheduled' : 'draft';
 
   const { data: campaign, error } = await supabase
@@ -36,8 +42,13 @@ export async function createCampaign(
 export async function deleteCampaign(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  try {
+    await requireAuthSession();
+  } catch {
+    return { success: false, error: 'Sin autorización' };
+  }
 
+  const supabase = await createClient();
   const { error } = await supabase
     .from('campaigns')
     .update({ deleted_at: new Date().toISOString() })

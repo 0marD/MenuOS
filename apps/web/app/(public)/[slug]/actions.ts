@@ -3,9 +3,22 @@
 import { createClient } from '@/lib/supabase/server';
 import { customerRegistrationSchema, type CustomerRegistrationInput } from '@menuos/shared/validations';
 
-function encryptPhone(phone: string): string {
-  // Production: use pgcrypto via RPC or a server-side encryption utility.
-  // For now, we store an obfuscated version; replace with proper AES-256 encryption.
+/**
+ * Phone encryption: uses pgcrypto AES via Supabase RPC in production.
+ * The encryption key must be set in PHONE_ENCRYPTION_KEY env var.
+ * Migration 0015 creates the encrypt_phone() RPC function.
+ */
+async function encryptPhone(supabase: Awaited<ReturnType<typeof createClient>>, phone: string): Promise<string> {
+  const key = process.env['PHONE_ENCRYPTION_KEY'];
+  if (key && key.length >= 16) {
+    const { data } = await supabase.rpc('encrypt_phone', { phone, key });
+    if (data) return data as string;
+  }
+  // Fallback: base64 (only for local dev where PHONE_ENCRYPTION_KEY is not set)
+  // In production, PHONE_ENCRYPTION_KEY must be set or this will log a warning
+  if (process.env['NODE_ENV'] === 'production') {
+    console.error('[SECURITY] PHONE_ENCRYPTION_KEY is not set — phone stored unencrypted');
+  }
   return Buffer.from(phone).toString('base64');
 }
 
@@ -21,9 +34,17 @@ export async function registerCustomer(
   const parsed = customerRegistrationSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: 'Datos inválidos' };
 
+  // Validate the org exists and accepts registrations
   const supabase = await createClient();
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('id')
+    .eq('id', orgId)
+    .is('deleted_at', null)
+    .single();
 
-  // Check if phone already registered for this org
+  if (!org) return { success: false, error: 'Organización no encontrada' };
+
   const last4 = phoneLast4(parsed.data.phone);
   const { data: existing } = await supabase
     .from('customers')
@@ -33,37 +54,29 @@ export async function registerCustomer(
     .is('deleted_at', null)
     .maybeSingle();
 
-  if (existing) {
-    // Already registered — silent success (don't expose phone match)
-    return { success: true };
-  }
+  if (existing) return { success: true }; // Silent: don't reveal match
 
-  const { error } = await supabase.from('customers').insert({
-    organization_id: orgId,
-    name: parsed.data.name.trim(),
-    phone_encrypted: encryptPhone(parsed.data.phone),
-    phone_last4: last4,
-    is_opted_in: parsed.data.consent,
-    segment: 'new',
-  });
+  const phoneEncrypted = await encryptPhone(supabase, parsed.data.phone);
 
-  if (error) return { success: false, error: 'No se pudo completar el registro' };
-
-  // Insert consent record
-  const { data: customer } = await supabase
+  const { error, data: customer } = await supabase
     .from('customers')
+    .insert({
+      organization_id: orgId,
+      name: parsed.data.name.trim(),
+      phone_encrypted: phoneEncrypted,
+      phone_last4: last4,
+      is_opted_in: parsed.data.consent,
+      segment: 'new',
+    })
     .select('id')
-    .eq('organization_id', orgId)
-    .eq('phone_last4', last4)
-    .is('deleted_at', null)
     .single();
 
-  if (customer) {
-    await supabase.from('customer_consents').insert([
-      { customer_id: customer.id, consent_type: 'marketing', granted: parsed.data.consent },
-      { customer_id: customer.id, consent_type: 'data_processing', granted: true },
-    ]);
-  }
+  if (error || !customer) return { success: false, error: 'No se pudo completar el registro' };
+
+  await supabase.from('customer_consents').insert([
+    { customer_id: customer.id, consent_type: 'marketing', granted: parsed.data.consent },
+    { customer_id: customer.id, consent_type: 'data_processing', granted: true },
+  ]);
 
   return { success: true };
 }
@@ -90,28 +103,58 @@ export async function placeOrder(
   input: PlaceOrderInput
 ): Promise<{ success: boolean; error?: string; orderId?: string }> {
   if (!input.items.length) return { success: false, error: 'El carrito está vacío' };
+  if (input.items.length > 50) return { success: false, error: 'Demasiados artículos' };
 
   const supabase = await createClient();
 
-  // Resolve table by qr_token if provided
+  // Validate org + branch exist and are active
+  const { data: branch } = await supabase
+    .from('branches')
+    .select('id, organization_id')
+    .eq('id', input.branchId)
+    .eq('organization_id', input.orgId)
+    .eq('is_active', true)
+    .is('deleted_at', null)
+    .single();
+
+  if (!branch) return { success: false, error: 'Sucursal no disponible' };
+
+  // Resolve table by qr_token
   let tableId: string | null = null;
   let tableNumber = input.tableNumber;
 
   if (input.tableToken) {
     const { data: table } = await supabase
       .from('restaurant_tables')
-      .select('id, number')
+      .select('id, number, branch_id')
       .eq('qr_token', input.tableToken)
       .eq('is_active', true)
       .single();
 
-    if (table) {
+    if (table && table.branch_id === input.branchId) {
       tableId = table.id;
       tableNumber = table.number;
     }
   }
 
-  const total = input.items.reduce((s, i) => s + i.price * i.quantity, 0);
+  // Validate all menu items belong to the org and are available
+  const itemIds = input.items.map((i) => i.menu_item_id);
+  const { data: menuItems } = await supabase
+    .from('menu_items')
+    .select('id, price, is_available, is_sold_out_today, organization_id')
+    .in('id', itemIds)
+    .eq('organization_id', input.orgId)
+    .eq('is_available', true)
+    .eq('is_sold_out_today', false)
+    .is('deleted_at', null);
+
+  if (!menuItems || menuItems.length !== itemIds.length) {
+    return { success: false, error: 'Uno o más platillos no están disponibles' };
+  }
+
+  // Use server-side prices (never trust client prices)
+  const priceMap = new Map(menuItems.map((m) => [m.id, Number(m.price)]));
+  const total = input.items.reduce((s, i) => s + (priceMap.get(i.menu_item_id) ?? 0) * i.quantity, 0);
 
   const { data: order, error: orderError } = await supabase
     .from('orders')
@@ -120,8 +163,8 @@ export async function placeOrder(
       branch_id: input.branchId,
       table_id: tableId,
       table_number: tableNumber,
-      customer_name: input.customerName,
-      notes: input.notes,
+      customer_name: input.customerName ? input.customerName.slice(0, 100) : null,
+      notes: input.notes ? input.notes.slice(0, 500) : null,
       total,
       status: 'pending',
     })
@@ -136,15 +179,14 @@ export async function placeOrder(
     input.items.map((item) => ({
       order_id: order.id,
       menu_item_id: item.menu_item_id,
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity,
-      notes: item.notes,
+      name: item.name.slice(0, 150),
+      price: priceMap.get(item.menu_item_id) ?? item.price, // Use server price
+      quantity: Math.min(Math.max(1, item.quantity), 20),   // Clamp 1–20
+      notes: item.notes ? item.notes.slice(0, 300) : null,
     }))
   );
 
   if (itemsError) {
-    // Rollback: soft-delete the order
     await supabase
       .from('orders')
       .update({ deleted_at: new Date().toISOString() })

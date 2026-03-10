@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { requireOrgSession, requireAuthSession } from '@/lib/auth/get-session';
 
 interface TableData {
   number: number;
@@ -15,8 +16,13 @@ export async function createTable(
   branchId: string,
   data: TableData
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  try {
+    await requireOrgSession(orgId);
+  } catch {
+    return { success: false, error: 'Sin autorización' };
+  }
 
+  const supabase = await createClient();
   const { error } = await supabase.from('restaurant_tables').insert({
     organization_id: orgId,
     branch_id: branchId,
@@ -39,8 +45,13 @@ export async function updateTable(
   id: string,
   data: TableData
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  try {
+    await requireAuthSession();
+  } catch {
+    return { success: false, error: 'Sin autorización' };
+  }
 
+  const supabase = await createClient();
   const { error } = await supabase
     .from('restaurant_tables')
     .update({ number: data.number, label: data.label, zone: data.zone, capacity: data.capacity })
@@ -53,6 +64,11 @@ export async function updateTable(
 }
 
 export async function deleteTable(id: string): Promise<{ success: boolean }> {
+  try {
+    await requireAuthSession();
+  } catch {
+    return { success: false };
+  }
   const supabase = await createClient();
   await supabase
     .from('restaurant_tables')
@@ -62,10 +78,12 @@ export async function deleteTable(id: string): Promise<{ success: boolean }> {
   return { success: true };
 }
 
-export async function toggleTableActive(
-  id: string,
-  active: boolean
-): Promise<{ success: boolean }> {
+export async function toggleTableActive(id: string, active: boolean): Promise<{ success: boolean }> {
+  try {
+    await requireAuthSession();
+  } catch {
+    return { success: false };
+  }
   const supabase = await createClient();
   await supabase.from('restaurant_tables').update({ is_active: active }).eq('id', id);
   revalidatePath('/admin/orders/tables');

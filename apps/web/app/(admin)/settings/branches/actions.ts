@@ -3,16 +3,25 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { branchSchema, type BranchInput } from '@menuos/shared/validations';
+import { requireAuthSession, requireOrgSession } from '@/lib/auth/get-session';
 
 export async function createBranch(
   orgId: string,
   data: BranchInput
 ): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await requireOrgSession(orgId);
+    if (!['super_admin', 'manager'].includes(session.role)) {
+      return { success: false, error: 'Sin autorización' };
+    }
+  } catch {
+    return { success: false, error: 'Sin autorización' };
+  }
+
   const parsed = branchSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: 'Datos inválidos' };
 
   const supabase = await createClient();
-
   const { error } = await supabase.from('branches').insert({
     organization_id: orgId,
     name: parsed.data.name,
@@ -31,11 +40,16 @@ export async function updateBranch(
   id: string,
   data: BranchInput
 ): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireAuthSession();
+  } catch {
+    return { success: false, error: 'Sin autorización' };
+  }
+
   const parsed = branchSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: 'Datos inválidos' };
 
   const supabase = await createClient();
-
   const { error } = await supabase
     .from('branches')
     .update({
@@ -52,28 +66,29 @@ export async function updateBranch(
   return { success: true };
 }
 
-export async function deleteBranch(
-  id: string
-): Promise<{ success: boolean }> {
+export async function deleteBranch(id: string): Promise<{ success: boolean }> {
+  try {
+    await requireAuthSession();
+  } catch {
+    return { success: false };
+  }
   const supabase = await createClient();
-
   await supabase
     .from('branches')
     .update({ deleted_at: new Date().toISOString(), is_active: false })
     .eq('id', id);
-
   revalidatePath('/admin/settings/branches');
   return { success: true };
 }
 
-export async function toggleBranchActive(
-  id: string,
-  active: boolean
-): Promise<{ success: boolean }> {
+export async function toggleBranchActive(id: string, active: boolean): Promise<{ success: boolean }> {
+  try {
+    await requireAuthSession();
+  } catch {
+    return { success: false };
+  }
   const supabase = await createClient();
-
   await supabase.from('branches').update({ is_active: active }).eq('id', id);
-
   revalidatePath('/admin/settings/branches');
   return { success: true };
 }

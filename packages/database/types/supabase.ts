@@ -846,6 +846,14 @@ export type Database = {
         Args: Record<string, never>;
         Returns: string;
       };
+      encrypt_phone: {
+        Args: { phone: string; key: string };
+        Returns: string;
+      };
+      decrypt_phone: {
+        Args: { encrypted: string; key: string };
+        Returns: string;
+      };
     };
     Enums: Record<string, never>;
   };
