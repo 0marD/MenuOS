@@ -250,3 +250,4 @@ git push origin main
 Software propietario. Ver [LICENSE](./LICENSE) para los términos completos.
 
 © 2026 MenuOS. Todos los derechos reservados.
+# MenuOS
