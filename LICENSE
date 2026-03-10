@@ -1,0 +1,100 @@
+MENUOS PROPRIETARY SOFTWARE LICENSE
+
+Copyright (c) 2026 MenuOS. All rights reserved.
+
+IMPORTANT — READ CAREFULLY BEFORE USING THIS SOFTWARE.
+
+This software and its source code, documentation, design assets, database schemas,
+business logic, and all associated materials (collectively, the "Software") are the
+exclusive proprietary property of MenuOS ("the Company"). The Software is protected
+by copyright law, trade secret law, and international intellectual property treaties.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. GRANT OF LICENSE
+
+   No license is granted under this agreement. Access to this repository and its
+   contents is restricted exclusively to authorized personnel, contractors, and
+   collaborators who have signed a separate Non-Disclosure Agreement (NDA) and/or
+   employment/contractor agreement with the Company.
+
+2. RESTRICTIONS
+
+   Unless expressly authorized in writing by the Company, you MAY NOT:
+
+   a) Copy, reproduce, distribute, publish, or transmit the Software or any portion
+      thereof in any form or by any means.
+
+   b) Modify, adapt, translate, reverse engineer, decompile, disassemble, or create
+      derivative works based on the Software.
+
+   c) Sublicense, sell, rent, lease, transfer, assign, or otherwise dispose of the
+      Software or any rights therein.
+
+   d) Remove, alter, or obscure any proprietary notices, labels, or marks on the
+      Software.
+
+   e) Use the Software to develop a competing product or service.
+
+   f) Disclose, share, or make available the Software or any portion thereof to any
+      third party without prior written consent from the Company.
+
+   g) Use the Software for any purpose other than those explicitly authorized by the
+      Company in writing.
+
+3. CONFIDENTIALITY
+
+   The Software contains trade secrets and confidential information belonging to
+   the Company. You agree to maintain the confidentiality of the Software using at
+   least the same degree of care you use to protect your own confidential information,
+   but no less than reasonable care.
+
+4. INTELLECTUAL PROPERTY
+
+   All title, ownership rights, and intellectual property rights in and to the
+   Software shall remain with the Company. This includes, without limitation:
+
+   - All source code, object code, and compiled binaries
+   - All database schemas, migrations, and seed data
+   - All UI/UX designs, design tokens, and brand assets
+   - All business logic, algorithms, and data models
+   - All documentation, specifications, and technical materials
+
+5. NO WARRANTIES
+
+   THE SOFTWARE IS PROVIDED "AS IS" FOR INTERNAL USE ONLY. THE COMPANY MAKES NO
+   WARRANTIES, EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
+   WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR
+   NON-INFRINGEMENT.
+
+6. LIMITATION OF LIABILITY
+
+   IN NO EVENT SHALL THE COMPANY BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL,
+   EXEMPLARY, OR CONSEQUENTIAL DAMAGES ARISING OUT OF OR IN CONNECTION WITH THE
+   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+7. TERMINATION
+
+   Any unauthorized use, reproduction, or distribution of the Software immediately
+   and automatically terminates any rights or permissions that may have been
+   granted to you, and may subject you to civil and criminal penalties.
+
+8. GOVERNING LAW
+
+   This license shall be governed by and construed in accordance with the laws of
+   Mexico (República Mexicana), without regard to its conflict of law provisions.
+   Any disputes arising under this license shall be subject to the exclusive
+   jurisdiction of the courts located in Mexico City, Mexico.
+
+9. ENTIRE AGREEMENT
+
+   This license constitutes the entire agreement between you and the Company with
+   respect to the Software and supersedes all prior or contemporaneous understandings
+   regarding such subject matter.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+For licensing inquiries, contact: legal@menuos.mx
+
+UNAUTHORIZED USE, REPRODUCTION, OR DISTRIBUTION OF THIS SOFTWARE IS STRICTLY
+PROHIBITED AND MAY RESULT IN SEVERE CIVIL AND CRIMINAL PENALTIES.
