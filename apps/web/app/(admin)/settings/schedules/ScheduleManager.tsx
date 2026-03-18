@@ -1,133 +1,83 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
-import { Switch } from '@menuos/ui/atoms/Switch';
-import { Button } from '@menuos/ui/atoms/Button';
-import { cn } from '@menuos/ui';
-import { saveSchedules, toggleTemporarilyClosed } from './actions';
+import { Button, Switch } from '@menuos/ui';
+import type { Tables } from '@menuos/database';
+import { toggleBranchTemporaryClosed, upsertSchedules } from './actions';
 
-const DAYS = [
-  { value: 1, label: 'Lunes' },
-  { value: 2, label: 'Martes' },
-  { value: 3, label: 'Miércoles' },
-  { value: 4, label: 'Jueves' },
-  { value: 5, label: 'Viernes' },
-  { value: 6, label: 'Sábado' },
-  { value: 0, label: 'Domingo' },
-] as const;
+const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
-interface Schedule {
-  id: string;
-  branch_id: string;
-  day_of_week: number;
-  opens_at: string;
-  closes_at: string;
-  is_open: boolean;
-}
+type Branch = Tables<'branches'>;
+type Schedule = Tables<'branch_schedules'>;
 
-interface Branch {
-  id: string;
-  name: string;
-  is_temporarily_closed: boolean;
-  closed_message: string | null;
-}
-
-interface DaySchedule {
-  day_of_week: number;
-  opens_at: string;
-  closes_at: string;
-  is_open: boolean;
-}
-
-interface ScheduleManagerProps {
-  branches: Branch[];
-  schedules: Schedule[];
-  orgId: string;
-}
-
-const DEFAULT_OPENS = '09:00';
-const DEFAULT_CLOSES = '22:00';
-
-function buildDaySchedules(branchId: string, schedules: Schedule[]): DaySchedule[] {
-  return DAYS.map(({ value }) => {
-    const existing = schedules.find((s) => s.branch_id === branchId && s.day_of_week === value);
+function defaultSchedules(branchId: string, existing: Schedule[]): ScheduleRow[] {
+  return DAYS.map((_, day) => {
+    const found = existing.find((s) => s.branch_id === branchId && s.day_of_week === day);
     return {
-      day_of_week: value,
-      opens_at: existing?.opens_at ?? DEFAULT_OPENS,
-      closes_at: existing?.closes_at ?? DEFAULT_CLOSES,
-      is_open: existing?.is_open ?? (value !== 0), // closed on Sunday by default
+      day_of_week: day,
+      opens_at: found?.opens_at ?? '09:00',
+      closes_at: found?.closes_at ?? '21:00',
+      is_closed: found?.is_closed ?? day === 0,
     };
   });
 }
 
-export function ScheduleManager({ branches, schedules, orgId }: ScheduleManagerProps) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [activeBranch, setActiveBranch] = useState<string>(branches[0]?.id ?? '');
-  const [daySchedules, setDaySchedules] = useState<Record<string, DaySchedule[]>>(() => {
-    const map: Record<string, DaySchedule[]> = {};
-    for (const branch of branches) {
-      map[branch.id] = buildDaySchedules(branch.id, schedules);
-    }
-    return map;
-  });
-  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+interface ScheduleRow {
+  day_of_week: number;
+  opens_at: string;
+  closes_at: string;
+  is_closed: boolean;
+}
 
-  if (branches.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-rule py-16 text-center">
-        <p className="text-sm font-sans text-muted">
-          Primero crea una sucursal para configurar sus horarios.
-        </p>
-      </div>
+interface ScheduleManagerProps {
+  branches: Branch[];
+  schedulesByBranch: Record<string, Schedule[]>;
+}
+
+export function ScheduleManager({ branches, schedulesByBranch }: ScheduleManagerProps) {
+  const [selectedBranchId, setSelectedBranchId] = useState(branches[0]?.id ?? '');
+  const [isPending, startTransition] = useTransition();
+
+  const branch = branches.find((b) => b.id === selectedBranchId);
+  const [rows, setRows] = useState<ScheduleRow[]>(() =>
+    defaultSchedules(selectedBranchId, schedulesByBranch[selectedBranchId] ?? []),
+  );
+
+  function handleBranchChange(id: string) {
+    setSelectedBranchId(id);
+    setRows(defaultSchedules(id, schedulesByBranch[id] ?? []));
+  }
+
+  function updateRow(day: number, field: keyof ScheduleRow, value: string | boolean) {
+    setRows((prev) =>
+      prev.map((r) => (r.day_of_week === day ? { ...r, [field]: value } : r)),
     );
   }
 
-  const branch = branches.find((b) => b.id === activeBranch);
-  const days = daySchedules[activeBranch] ?? [];
-
-  function updateDay(dayOfWeek: number, field: keyof DaySchedule, value: string | boolean) {
-    setDaySchedules((prev) => ({
-      ...prev,
-      [activeBranch]: (prev[activeBranch] ?? []).map((d) =>
-        d.day_of_week === dayOfWeek ? { ...d, [field]: value } : d
-      ),
-    }));
-    setSavedMsg(null);
-  }
-
   function handleSave() {
-    setSavedMsg(null);
-    startTransition(async () => {
-      await saveSchedules(activeBranch, orgId, daySchedules[activeBranch] ?? []);
-      setSavedMsg('Horarios guardados');
-      router.refresh();
-    });
+    startTransition(async () => { await upsertSchedules(selectedBranchId, rows); });
   }
 
-  function handleTemporaryClosed(branchId: string, closed: boolean) {
-    startTransition(async () => {
-      await toggleTemporarilyClosed(branchId, closed);
-      router.refresh();
-    });
+  function handleToggleClosed(isClosed: boolean) {
+    startTransition(async () => { await toggleBranchTemporaryClosed(selectedBranchId, isClosed); });
   }
+
+  if (!branch) return <p className="text-sm text-muted">No hay sucursales configuradas.</p>;
 
   return (
-    <div className="space-y-4">
-      {/* Branch tabs */}
+    <div className="flex flex-col gap-6">
+      {/* Branch selector */}
       {branches.length > 1 && (
-        <div role="tablist" aria-label="Sucursales" className="flex gap-1 rounded-lg border border-rule bg-cream p-1">
+        <div className="flex gap-2 overflow-x-auto">
           {branches.map((b) => (
             <button
               key={b.id}
-              role="tab"
-              aria-selected={activeBranch === b.id}
-              onClick={() => { setActiveBranch(b.id); setSavedMsg(null); }}
-              className={cn(
-                'flex-1 rounded-md px-3 py-1.5 text-sm font-sans transition-colors',
-                activeBranch === b.id ? 'bg-paper font-medium text-ink shadow-sm' : 'text-muted hover:text-ink'
-              )}
+              onClick={() => handleBranchChange(b.id)}
+              className={`shrink-0 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                b.id === selectedBranchId
+                  ? 'bg-accent/10 text-accent'
+                  : 'bg-cream text-muted hover:bg-rule'
+              }`}
             >
               {b.name}
             </button>
@@ -135,81 +85,65 @@ export function ScheduleManager({ branches, schedules, orgId }: ScheduleManagerP
         </div>
       )}
 
-      {/* Temporarily closed toggle */}
-      {branch && (
-        <div className="flex items-center justify-between rounded-xl border border-rule bg-card px-4 py-3">
-          <div>
-            <p className="text-sm font-sans font-medium text-ink">Cerrado temporalmente</p>
-            <p className="text-xs font-sans text-muted">
-              El menú mostrará un mensaje de cierre hasta que lo desactives.
-            </p>
-          </div>
-          <Switch
-            checked={branch.is_temporarily_closed}
-            onCheckedChange={(v) => handleTemporaryClosed(branch.id, v)}
-            aria-label="Cierre temporal"
-          />
+      {/* Temp closed toggle */}
+      <div className="flex items-center justify-between rounded-xl border border-rule bg-paper px-5 py-4">
+        <div>
+          <p className="font-medium text-ink">Cerrado temporalmente</p>
+          <p className="text-xs text-muted">Muestra &quot;cerrado hoy&quot; en el menú del cliente</p>
         </div>
-      )}
-
-      {/* Schedule table */}
-      <div className="overflow-hidden rounded-xl border border-rule">
-        <table className="w-full text-sm font-sans">
-          <thead className="border-b border-rule bg-cream">
-            <tr>
-              <th scope="col" className="px-4 py-3 text-left font-medium text-muted">Día</th>
-              <th scope="col" className="px-4 py-3 text-left font-medium text-muted">Abre</th>
-              <th scope="col" className="px-4 py-3 text-left font-medium text-muted">Cierra</th>
-              <th scope="col" className="px-4 py-3 text-center font-medium text-muted">Abierto</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-rule bg-card">
-            {days.map((day) => {
-              const dayLabel = DAYS.find((d) => d.value === day.day_of_week)?.label ?? '';
-              return (
-                <tr key={day.day_of_week} className={cn(!day.is_open && 'opacity-50')}>
-                  <td className="px-4 py-2 font-medium text-ink">{dayLabel}</td>
-                  <td className="px-4 py-2">
-                    <input
-                      type="time"
-                      value={day.opens_at}
-                      onChange={(e) => updateDay(day.day_of_week, 'opens_at', e.target.value)}
-                      disabled={!day.is_open}
-                      className="h-8 rounded-md border border-rule bg-cream px-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed"
-                      aria-label={`${dayLabel}: hora de apertura`}
-                    />
-                  </td>
-                  <td className="px-4 py-2">
-                    <input
-                      type="time"
-                      value={day.closes_at}
-                      onChange={(e) => updateDay(day.day_of_week, 'closes_at', e.target.value)}
-                      disabled={!day.is_open}
-                      className="h-8 rounded-md border border-rule bg-cream px-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed"
-                      aria-label={`${dayLabel}: hora de cierre`}
-                    />
-                  </td>
-                  <td className="px-4 py-2 text-center">
-                    <Switch
-                      checked={day.is_open}
-                      onCheckedChange={(v) => updateDay(day.day_of_week, 'is_open', v)}
-                      aria-label={`${dayLabel}: ${day.is_open ? 'abierto' : 'cerrado'}`}
-                    />
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <Switch
+          checked={branch.is_temporarily_closed}
+          onCheckedChange={handleToggleClosed}
+          aria-label="Cerrado temporalmente"
+        />
       </div>
 
-      <div className="flex items-center gap-4">
+      {/* Weekly schedule */}
+      <div className="overflow-hidden rounded-xl border border-rule bg-paper">
+        <div className="border-b border-rule px-5 py-3">
+          <p className="font-display text-sm font-semibold text-ink">Horario semanal</p>
+        </div>
+        <div className="divide-y divide-rule">
+          {rows.map((row) => (
+            <div key={row.day_of_week} className="flex items-center gap-4 px-5 py-3">
+              <span className="w-24 shrink-0 text-sm font-medium text-ink">
+                {DAYS[row.day_of_week]}
+              </span>
+              <Switch
+                checked={!row.is_closed}
+                onCheckedChange={(v) => updateRow(row.day_of_week, 'is_closed', !v)}
+                aria-label={`${DAYS[row.day_of_week]} abierto`}
+              />
+              {!row.is_closed ? (
+                <div className="flex flex-1 items-center gap-2">
+                  <input
+                    type="time"
+                    value={row.opens_at}
+                    onChange={(e) => updateRow(row.day_of_week, 'opens_at', e.target.value)}
+                    className="rounded border border-rule bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                    aria-label={`Apertura ${DAYS[row.day_of_week]}`}
+                  />
+                  <span className="text-xs text-muted">–</span>
+                  <input
+                    type="time"
+                    value={row.closes_at}
+                    onChange={(e) => updateRow(row.day_of_week, 'closes_at', e.target.value)}
+                    className="rounded border border-rule bg-paper px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent"
+                    aria-label={`Cierre ${DAYS[row.day_of_week]}`}
+                  />
+                </div>
+              ) : (
+                <span className="flex-1 text-sm text-muted">Cerrado</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex justify-end">
         <Button onClick={handleSave} disabled={isPending}>
-          {isPending ? 'Guardando...' : 'Guardar horarios'}
+          {isPending ? 'Guardando…' : 'Guardar horarios'}
         </Button>
-        {savedMsg && (
-          <p role="status" className="text-sm font-sans text-green">{savedMsg}</p>
-        )}
       </div>
     </div>
   );
