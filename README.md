@@ -1,253 +1,229 @@
 # MenuOS
 
-> **Sistema de gestión digital para restaurantes independientes.**
-> Menú QR en tiempo real · CRM · Campañas WhatsApp · Pedidos · Fidelidad
+**SaaS vertical para restaurantes independientes en México y LATAM.**
+
+MenuOS digitaliza la operación completa de un restaurante: menú QR editable en tiempo real, captura de clientes con marketing por WhatsApp, sistema de pedidos mesa→cocina, y programa de lealtad con sellos digitales.
 
 ---
 
-## ¿Qué es MenuOS?
+## Módulos
 
-MenuOS es una plataforma SaaS diseñada para restaurantes independientes en México. Permite a los dueños publicar su menú digital con un QR permanente, gestionar clientes, enviar campañas de WhatsApp, recibir pedidos en tiempo real y administrar programas de lealtad — todo desde un panel centralizado.
-
-### Módulos principales
-
-| Módulo | Descripción |
-|--------|-------------|
-| **Menú QR** | Menú digital con URL permanente, edición en tiempo real, fotos, filtros y modo offline |
-| **CRM** | Base de clientes propia, segmentación automática (nuevo/frecuente/dormido), exportación CSV |
-| **Campañas WA** | Mensajes WhatsApp segmentados, programables, con analytics de entrega y lectura |
-| **Pedidos** | Carrito del cliente → mesero → cocina en tiempo real. App de mesero + KDS |
-| **Fidelidad** | Tarjeta de sellos digital, recompensas configurables, detección de fraude |
-| **Admin** | Dashboard con métricas, editor de menú, gestión de sucursales, equipo y horarios |
+| Módulo | Descripción | Estado |
+|--------|-------------|--------|
+| **M1 — QR Menu** | Menú digital editable en tiempo real, multi-sucursal, con filtros dietéticos y gestión de fotos | MVP |
+| **M2 — CRM + WhatsApp** | Captura de datos, segmentación, campañas automatizadas via 360dialog BSP | MVP |
+| **M3 — Pedidos + KDS** | PWA cliente → mesero → cocina con actualizaciones en tiempo real | MVP |
+| **M4 — Lealtad** | Sellos digitales, programas configurables, canje de recompensas | MVP |
 
 ---
 
 ## Stack tecnológico
 
-- **Frontend** — Next.js 15 · React 19 · TypeScript strict · Tailwind CSS · shadcn/ui
-- **Backend** — Supabase (PostgreSQL · Auth · Realtime · Storage)
-- **Monorepo** — pnpm workspaces · Turborepo
-- **Hosting** — Vercel (frontend) · Supabase Cloud (backend)
-- **Monitoreo** — Sentry · PostHog
-- **Testing** — Vitest (unitarios) · TypeScript strict
+- **Frontend:** Next.js 15, React 19, TypeScript 5 (strict), Tailwind CSS 3
+- **Backend:** Supabase (PostgreSQL, Auth, Realtime, Storage, Edge Functions)
+- **Pagos:** Stripe (checkout + portal + webhooks)
+- **WhatsApp:** 360dialog BSP
+- **Monitoreo:** Sentry + PostHog
+- **Infraestructura:** Vercel + Cloudflare CDN
+- **Tooling:** pnpm 10, Turborepo 2, ESLint, Prettier
 
 ---
 
-## Estructura del proyecto
+## Arquitectura del monorepo
 
 ```
-menuos/
+MenuOS/
 ├── apps/
-│   └── web/                     # Next.js 15 App Router
+│   └── web/                        # Aplicación Next.js principal
 │       ├── app/
-│       │   ├── (admin)/         # Panel de administración
-│       │   ├── (public)/[slug]/ # PWA del cliente (menú + carrito + fidelidad)
-│       │   ├── (waiter)/        # App del mesero
-│       │   ├── (kitchen)/       # KDS (Kitchen Display System)
-│       │   └── auth/            # Login · Register · PIN
-│       ├── components/
-│       ├── lib/
-│       └── public/
+│       │   ├── (admin)/            # Panel de administración
+│       │   │   ├── dashboard/      # Métricas y acceso rápido
+│       │   │   ├── menu/           # Editor de categorías e ítems
+│       │   │   ├── orders/         # Gestión de pedidos
+│       │   │   ├── crm/            # Tabla de clientes y segmentos
+│       │   │   ├── campaigns/      # Campañas WhatsApp
+│       │   │   ├── loyalty/        # Programas de lealtad
+│       │   │   ├── qr/             # Generador de códigos QR
+│       │   │   ├── onboarding/     # Wizard de configuración inicial
+│       │   │   └── settings/       # Marca, sucursales, equipo, billing
+│       │   ├── (public)/[slug]/    # PWA pública del cliente
+│       │   ├── (waiter)/waiter/    # PWA del mesero (PIN auth)
+│       │   ├── (kitchen)/kitchen/  # KDS (Kitchen Display System)
+│       │   └── auth/               # Login, registro, PIN, forgot-password
+│       ├── components/             # Componentes globales (PushSubscriber, SW)
+│       └── lib/                    # Auth, Supabase client/server, push, utils
 ├── packages/
-│   ├── ui/                      # Design system (atoms → molecules → organisms)
-│   ├── shared/                  # Constants · Utils · Validaciones Zod
-│   ├── database/                # Tipos de Supabase
-│   └── config/                  # TypeScript · ESLint · Tailwind compartidos
+│   ├── ui/                         # Design system (atoms, molecules, organisms)
+│   ├── shared/                     # Constantes, utilidades, validaciones Zod
+│   ├── database/                   # Tipos generados por Supabase
+│   └── config/                     # Configs compartidas (Tailwind, ESLint, TS)
 ├── supabase/
-│   ├── migrations/              # 15 migraciones SQL con RLS
-│   └── seed.sql
-└── docs/                        # Especificaciones del producto
+│   ├── migrations/                 # 22 migraciones SQL (0001–0022)
+│   ├── functions/                  # Edge Functions (WhatsApp, Stripe, push, OTP, cron)
+│   └── seed.sql                    # Datos de desarrollo
+└── docs/                           # Documentación técnica y de producto
 ```
+
+---
+
+## Roles de usuario
+
+| Rol | Autenticación | Acceso |
+|-----|--------------|--------|
+| `super_admin` | Email + contraseña | Panel completo + billing |
+| `manager` | Email + contraseña | Panel sin billing, limitado a sus sucursales |
+| `waiter` | PIN (4 dígitos) | PWA mesero: pedidos + sellos |
+| `kitchen` | PIN (4 dígitos) | KDS: visualización y marcado de platillos |
+| Cliente | WhatsApp OTP (opcional) | Menú público + carrito + lealtad |
 
 ---
 
 ## Requisitos previos
 
-- **Node.js** ≥ 20
-- **pnpm** ≥ 10 — `npm install -g pnpm`
-- **Supabase CLI** — `brew install supabase/tap/supabase`
-- Cuenta en [supabase.com](https://supabase.com) (para producción)
+- Node.js >= 20
+- pnpm >= 10
+- Cuenta en [Supabase](https://supabase.com)
+- Cuenta en [Stripe](https://stripe.com) (para billing)
+- Cuenta en [360dialog](https://www.360dialog.com) (para WhatsApp)
+- Cuenta en [Vercel](https://vercel.com) (para deploy)
 
 ---
 
-## Configuración local
-
-### 1. Clonar e instalar dependencias
+## Instalación y desarrollo
 
 ```bash
+# Clonar el repositorio
 git clone <repo-url>
-cd menuos
+cd MenuOS
+
+# Instalar dependencias
 pnpm install
-```
 
-### 2. Configurar variables de entorno
+# Copiar variables de entorno
+cp apps/web/.env.example apps/web/.env.local
+# Editar apps/web/.env.local con tus credenciales
 
-```bash
-cp .env.example apps/web/.env.local
-```
-
-Edita `apps/web/.env.local` con tus valores. Las variables mínimas para desarrollo:
-
-```bash
-# Supabase local (se obtienen con `supabase start`)
-NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
-
-# Seguridad — genera con: openssl rand -base64 32
-PIN_SALT=tu_salt_aleatorio_de_minimo_32_chars
-PHONE_ENCRYPTION_KEY=tu_clave_aleatoria_de_minimo_32_chars
-
-# App
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-NEXT_PUBLIC_APP_DOMAIN=menuos.mx
-```
-
-### 3. Iniciar Supabase local
-
-```bash
+# Iniciar base de datos local (requiere Supabase CLI)
 supabase start
-```
+supabase db reset   # aplica migraciones + seed
 
-Esto levanta PostgreSQL, Auth y Storage localmente. La primera vez aplica las migraciones automáticamente.
-
-### 4. Levantar el servidor de desarrollo
-
-```bash
+# Iniciar servidor de desarrollo
 pnpm dev
 ```
 
-Abre [http://localhost:3000](http://localhost:3000).
+La app estará disponible en `http://localhost:3000`.
 
 ---
 
-## Rutas principales
+## Variables de entorno
 
-| Ruta | Descripción |
-|------|-------------|
-| `/auth/login` | Login de administrador |
-| `/auth/register` | Registro + creación de restaurante |
-| `/auth/pin` | Acceso de mesero/cocina por PIN |
-| `/admin/dashboard` | Panel principal con métricas |
-| `/admin/menu` | Editor de categorías y platillos |
-| `/admin/crm` | Lista de clientes con segmentos |
-| `/admin/campaigns` | Campañas de WhatsApp |
-| `/admin/loyalty` | Programa de fidelidad |
-| `/admin/orders` | Pedidos del día con métricas |
-| `/admin/orders/tables` | Configuración de mesas y QRs |
-| `/admin/qr` | Generador de código QR del restaurante |
-| `/admin/settings/brand` | Logo, banner y plantilla del menú |
-| `/admin/settings/branches` | Sucursales |
-| `/admin/settings/team` | Equipo y PINs |
-| `/admin/settings/schedules` | Horarios de atención |
-| `/admin/onboarding` | Guía de configuración inicial (5 pasos) |
-| `/[slug]` | PWA pública del cliente (menú + carrito) |
-| `/[slug]/loyalty` | Tarjeta de sellos del cliente |
-| `/waiter` | App del mesero |
-| `/kitchen` | KDS de cocina |
+Copia `apps/web/.env.example` a `apps/web/.env.local` y completa:
+
+| Variable | Descripción |
+|----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto Supabase |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Clave anon de Supabase |
+| `STRIPE_SECRET_KEY` | Clave secreta de Stripe |
+| `STRIPE_WEBHOOK_SECRET` | Secreto del webhook de Stripe |
+| `STRIPE_PRICE_STARTER` | Price ID del plan Starter en Stripe |
+| `STRIPE_PRICE_PRO` | Price ID del plan Pro en Stripe |
+| `STRIPE_PRICE_BUSINESS` | Price ID del plan Business en Stripe |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Clave pública VAPID para push notifications |
+| `PHONE_ENCRYPTION_KEY` | Clave de 32 chars para cifrar números de teléfono |
+| `SENTRY_ORG` | Organización en Sentry (opcional) |
+| `SENTRY_PROJECT` | Proyecto en Sentry (opcional) |
+| `SENTRY_AUTH_TOKEN` | Token de Sentry para upload de source maps (opcional) |
+| `NEXT_PUBLIC_POSTHOG_KEY` | API key de PostHog (opcional) |
+| `NEXT_PUBLIC_POSTHOG_HOST` | Host de PostHog (opcional) |
+
+Las claves de Supabase Edge Functions (VAPID privado, 360dialog, cron secret) se configuran en `supabase secrets set`.
 
 ---
 
-## Scripts disponibles
+## Comandos disponibles
 
 ```bash
-pnpm dev          # Servidor de desarrollo (todos los paquetes)
+pnpm dev          # Inicia todos los paquetes en modo desarrollo
 pnpm build        # Build de producción
 pnpm typecheck    # Verificación de tipos TypeScript
-pnpm test         # Tests unitarios (Vitest)
-pnpm lint         # ESLint
+pnpm lint         # ESLint en todo el monorepo
+pnpm test         # Ejecuta tests
+pnpm clean        # Limpia caché y node_modules
 ```
 
 ---
 
 ## Base de datos
 
-El proyecto usa **15 migraciones SQL** en `supabase/migrations/`:
+Las migraciones están en `supabase/migrations/` y se aplican en orden. Las principales entidades son:
 
-| Migración | Contenido |
-|-----------|-----------|
-| 0001–0007 | Organizations, branches, staff, menu, settings, audit log |
-| 0008 | RLS policies (Row Level Security en todas las tablas) |
-| 0009–0010 | Customers (CRM) + Campaigns |
-| 0011 | RLS adicional para customers |
-| 0012 | Branch schedules |
-| 0013 | Loyalty (programs, stamp cards, stamps, rewards) |
-| 0014 | Orders (restaurant tables, orders, order items, status history) |
-| 0015 | Security hardening (pgcrypto, RLS restrictivo) |
-
-Para aplicar migraciones en local:
-
-```bash
-supabase db reset    # Resetea y aplica todas las migraciones + seed
+```
+organizations → branches → tables
+                         → staff_users
+                         → menu_categories → menu_items
+                         → customers → stamp_cards → stamps
+                         → orders → order_items
+                         → loyalty_programs → rewards
+                         → campaigns → campaign_analytics
 ```
 
-Para generar tipos tras una migración nueva:
-
-```bash
-supabase gen types typescript --local > packages/database/types/supabase.ts
-```
+Todas las tablas tienen Row Level Security (RLS) habilitado.
 
 ---
 
-## Testing
+## Edge Functions
 
-```bash
-# Unitarios — 111 tests
-pnpm --filter @menuos/shared test
-
-# TypeScript en todos los paquetes
-pnpm typecheck
-```
-
-Los tests cubren: constantes de negocio, utilidades (slug, teléfono, PIN, precios, fechas) y todos los schemas de validación Zod.
-
----
-
-## Deploy
-
-### Variables de entorno en producción
-
-Además de las de desarrollo, agrega en Vercel:
-
-```bash
-NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...   # de producción
-SUPABASE_SERVICE_ROLE_KEY=eyJ...       # de producción
-PIN_SALT=<32+ chars aleatorios>
-PHONE_ENCRYPTION_KEY=<32+ chars aleatorios>
-NEXT_PUBLIC_SENTRY_DSN=https://...@sentry.io/...
-SENTRY_ORG=tu-org
-SENTRY_PROJECT=menuos
-SENTRY_AUTH_TOKEN=sntrys_...
-NEXT_PUBLIC_POSTHOG_KEY=phc_...
-```
-
-### Pasos
-
-```bash
-# 1. Aplicar migraciones en Supabase Cloud
-supabase db push
-
-# 2. Deploy en Vercel (automático desde main)
-git push origin main
-```
+| Función | Trigger | Descripción |
+|---------|---------|-------------|
+| `send-whatsapp` | HTTP (admin action) | Envía campaña a segmento de clientes |
+| `webhook-whatsapp` | HTTP (360dialog) | Procesa estados de entrega/lectura |
+| `send-push` | HTTP (internal) | Envía notificaciones push a staff |
+| `webhook-stripe` | HTTP (Stripe) | Actualiza plan y estado de suscripción |
+| `send-otp` | HTTP (customer PWA) | Genera y envía OTP por WhatsApp |
+| `grant-stamp` | HTTP (waiter) | Otorga sello con validación anti-fraude |
+| `cron-automations` | pg_cron (daily 10am MXC) | Reactivación dormant, cumpleaños, expiración sellos |
 
 ---
 
-## Seguridad
+## Deploy a producción
 
-- **RLS** habilitado en todas las tablas — aislamiento por `organization_id`
-- **PIN hashing** con PBKDF2-SHA256 (100,000 iteraciones)
-- **Teléfonos** cifrados con AES-256 via pgcrypto
-- **Server actions** con `requireAuthSession()` / `requireOrgSession()` en todas las rutas protegidas
-- **Precios** validados server-side en cada pedido (nunca se confía en el cliente)
-- Soft deletes en todas las tablas (`deleted_at`)
+1. **Supabase:** Aplica las migraciones en el proyecto de producción con `supabase db push`.
+2. **pg_cron:** Habilitar en Supabase Dashboard → Database → Extensions y configurar el schedule de `cron-automations`.
+3. **Edge Functions:** `supabase functions deploy --project-ref <ref>`
+4. **Stripe webhook:** Registrar el endpoint `https://<dominio>/api/webhooks/stripe` en el Dashboard de Stripe para los eventos: `checkout.session.completed`, `customer.subscription.*`, `invoice.payment_*`.
+5. **Vercel:** Conectar el repositorio, seleccionar `apps/web` como root directory y configurar las variables de entorno.
+
+---
+
+## Precios
+
+| Plan | Precio | Sucursales | Clientes | Mensajes WA/mes |
+|------|--------|------------|----------|-----------------|
+| Starter | $499 MXN/mes | 1 | 500 | 1,000 |
+| Pro | $999 MXN/mes | 3 | 2,000 | 5,000 |
+| Business | $1,899 MXN/mes | Ilimitadas | Ilimitados | Ilimitados |
+
+Todos los planes incluyen 14 días de prueba gratuita.
+
+---
+
+## Documentación
+
+Los documentos de producto, arquitectura y lineamientos de desarrollo se encuentran en la carpeta [`docs/`](./docs/):
+
+- `01-resumen-ejecutivo.md` — Visión general del producto y modelo de negocio
+- `02-plan-de-negocios.md` — Plan completo con proyecciones financieras
+- `03-libro-de-marca.md` — Identidad visual, tipografía y tono de voz
+- `04-funcionalidades-saas.md` — Especificación detallada de funcionalidades
+- `05-arquitectura-app.md` — Arquitectura técnica y esquema de base de datos
+- `06-stack-tecnologico.md` — Decisiones de stack y justificaciones
+- `07-lineamientos-paradigmas.md` — Paradigmas de desarrollo y estándares de código
+- `08-interaccion-agentes.md` — Flujos de interacción por tipo de usuario
 
 ---
 
 ## Licencia
 
-Software propietario. Ver [LICENSE](./LICENSE) para los términos completos.
+Software propietario. Todos los derechos reservados. Ver [LICENSE](./LICENSE) para más información.
 
-© 2026 MenuOS. Todos los derechos reservados.
-# MenuOS
+© 2026 MenuOS. Prohibida su reproducción, distribución o uso no autorizado.

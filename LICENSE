@@ -1,100 +1,324 @@
-MENUOS PROPRIETARY SOFTWARE LICENSE
+MENUOS PROPRIETARY SOFTWARE LICENSE AGREEMENT
+Version 2.0 — Effective Date: 2026-03-18
 
 Copyright (c) 2026 MenuOS. All rights reserved.
 
-IMPORTANT — READ CAREFULLY BEFORE USING THIS SOFTWARE.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-This software and its source code, documentation, design assets, database schemas,
-business logic, and all associated materials (collectively, the "Software") are the
-exclusive proprietary property of MenuOS ("the Company"). The Software is protected
-by copyright law, trade secret law, and international intellectual property treaties.
+IMPORTANT — READ THIS LICENSE AGREEMENT CAREFULLY BEFORE ACCESSING, COPYING,
+INSTALLING, OR USING THIS SOFTWARE. BY ACCESSING OR USING THE SOFTWARE IN ANY
+WAY, YOU ACKNOWLEDGE THAT YOU HAVE READ AND UNDERSTOOD THIS AGREEMENT AND AGREE
+TO BE BOUND BY ITS TERMS. IF YOU DO NOT AGREE, DO NOT ACCESS OR USE THE SOFTWARE.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. GRANT OF LICENSE
+PREAMBLE
 
-   No license is granted under this agreement. Access to this repository and its
-   contents is restricted exclusively to authorized personnel, contractors, and
-   collaborators who have signed a separate Non-Disclosure Agreement (NDA) and/or
-   employment/contractor agreement with the Company.
-
-2. RESTRICTIONS
-
-   Unless expressly authorized in writing by the Company, you MAY NOT:
-
-   a) Copy, reproduce, distribute, publish, or transmit the Software or any portion
-      thereof in any form or by any means.
-
-   b) Modify, adapt, translate, reverse engineer, decompile, disassemble, or create
-      derivative works based on the Software.
-
-   c) Sublicense, sell, rent, lease, transfer, assign, or otherwise dispose of the
-      Software or any rights therein.
-
-   d) Remove, alter, or obscure any proprietary notices, labels, or marks on the
-      Software.
-
-   e) Use the Software to develop a competing product or service.
-
-   f) Disclose, share, or make available the Software or any portion thereof to any
-      third party without prior written consent from the Company.
-
-   g) Use the Software for any purpose other than those explicitly authorized by the
-      Company in writing.
-
-3. CONFIDENTIALITY
-
-   The Software contains trade secrets and confidential information belonging to
-   the Company. You agree to maintain the confidentiality of the Software using at
-   least the same degree of care you use to protect your own confidential information,
-   but no less than reasonable care.
-
-4. INTELLECTUAL PROPERTY
-
-   All title, ownership rights, and intellectual property rights in and to the
-   Software shall remain with the Company. This includes, without limitation:
-
-   - All source code, object code, and compiled binaries
-   - All database schemas, migrations, and seed data
-   - All UI/UX designs, design tokens, and brand assets
-   - All business logic, algorithms, and data models
-   - All documentation, specifications, and technical materials
-
-5. NO WARRANTIES
-
-   THE SOFTWARE IS PROVIDED "AS IS" FOR INTERNAL USE ONLY. THE COMPANY MAKES NO
-   WARRANTIES, EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
-   WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR
-   NON-INFRINGEMENT.
-
-6. LIMITATION OF LIABILITY
-
-   IN NO EVENT SHALL THE COMPANY BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL,
-   EXEMPLARY, OR CONSEQUENTIAL DAMAGES ARISING OUT OF OR IN CONNECTION WITH THE
-   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
-
-7. TERMINATION
-
-   Any unauthorized use, reproduction, or distribution of the Software immediately
-   and automatically terminates any rights or permissions that may have been
-   granted to you, and may subject you to civil and criminal penalties.
-
-8. GOVERNING LAW
-
-   This license shall be governed by and construed in accordance with the laws of
-   Mexico (República Mexicana), without regard to its conflict of law provisions.
-   Any disputes arising under this license shall be subject to the exclusive
-   jurisdiction of the courts located in Mexico City, Mexico.
-
-9. ENTIRE AGREEMENT
-
-   This license constitutes the entire agreement between you and the Company with
-   respect to the Software and supersedes all prior or contemporaneous understandings
-   regarding such subject matter.
+This software, including all its source code, object code, documentation, design
+assets, database schemas, business logic, algorithms, data models, configuration
+files, and all associated materials (collectively, the "Software") constitutes
+highly valuable, confidential trade secrets and proprietary intellectual property
+of MenuOS ("the Company"). The Software is protected by copyright law, trade
+secret law, unfair competition law, and all applicable international intellectual
+property treaties, including the Berne Convention, the TRIPS Agreement, and the
+WIPO Copyright Treaty.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-For licensing inquiries, contact: legal@menuos.mx
+1. DEFINITIONS
 
-UNAUTHORIZED USE, REPRODUCTION, OR DISTRIBUTION OF THIS SOFTWARE IS STRICTLY
-PROHIBITED AND MAY RESULT IN SEVERE CIVIL AND CRIMINAL PENALTIES.
+   1.1 "Software" means the MenuOS platform in its entirety, including but not
+       limited to: all source code files, compiled binaries, scripts, database
+       migrations, seed data, Supabase Edge Functions, configuration files,
+       environment templates, design tokens, UI components, documentation,
+       business logic, algorithms, data structures, and any derivative works
+       created by the Company.
+
+   1.2 "Authorized Personnel" means individuals who have been explicitly granted
+       access in writing by the Company and who have executed a valid
+       Non-Disclosure Agreement (NDA) and/or employment or contractor agreement
+       with the Company that is currently in force.
+
+   1.3 "Competing Product" means any software, service, or platform that provides
+       substantially similar functionality to the Software, including but not
+       limited to: QR-based digital menus, restaurant CRM systems, table ordering
+       systems, kitchen display systems, or restaurant loyalty programs.
+
+   1.4 "Derivative Work" means any work that is based upon, incorporates, or is
+       derived from the Software or any portion thereof, including translations,
+       adaptations, modifications, enhancements, ports, integrations, or any work
+       that would be considered a derivative work under applicable copyright law.
+
+   1.5 "Confidential Information" means the Software and all non-public
+       information related to the Company's business, technology, customers,
+       finances, strategies, and operations.
+
+2. GRANT OF LICENSE — NO LICENSE GRANTED
+
+   NO LICENSE OF ANY KIND IS GRANTED UNDER THIS AGREEMENT. Access to this
+   repository and its contents is restricted exclusively to Authorized Personnel.
+   Any access, use, or possession of the Software by any person or entity not
+   qualifying as Authorized Personnel is unauthorized and constitutes
+   misappropriation of trade secrets and infringement of intellectual property.
+
+3. AUTHORIZED USE — STRICT RESTRICTIONS
+
+   Even Authorized Personnel are subject to the following restrictions and may
+   ONLY use the Software for the purpose explicitly authorized in their individual
+   agreement with the Company. Except as expressly authorized in writing by the
+   Company, you MAY NOT, directly or indirectly, whether personally or through
+   any third party:
+
+   a) REPRODUCTION & DISTRIBUTION: Copy, reproduce, duplicate, publish, upload,
+      post, transmit, broadcast, distribute, or otherwise disseminate the Software
+      or any portion thereof, in any form or by any means, electronic, mechanical,
+      photocopying, recording, or otherwise.
+
+   b) MODIFICATION: Modify, adapt, translate, localize, customize, enhance,
+      extend, or create Derivative Works based on the Software or any portion
+      thereof.
+
+   c) REVERSE ENGINEERING: Reverse engineer, decompile, disassemble, decode,
+      decrypt, or attempt to derive or reconstruct the source code, underlying
+      algorithms, data structures, ideas, or architecture of the Software.
+
+   d) COMMERCIALIZATION: Sublicense, sell, resell, rent, lease, lend, time-share,
+      transfer, assign, or otherwise commercially exploit or make available to any
+      third party the Software or any rights therein.
+
+   e) COMPETING USE: Use the Software, or any knowledge, information, or ideas
+      derived therefrom, to develop, design, assist in the development of, or
+      provide technical input to any Competing Product or service.
+
+   f) DISCLOSURE: Disclose, share, communicate, demonstrate, or make available
+      the Software or any Confidential Information derived therefrom to any third
+      party, whether or not for compensation, without prior written consent from
+      the Company.
+
+   g) PROPRIETARY NOTICES: Remove, alter, obscure, cover, or modify any
+      proprietary notices, copyright notices, trademarks, trade names, labels,
+      watermarks, or marks on or within the Software.
+
+   h) UNAUTHORIZED ACCESS: Access or use the Software for any purpose not
+      explicitly authorized by the Company in writing.
+
+   i) AUTOMATED PROCESSING & AI TRAINING: Use the Software, its source code,
+      architecture, data models, or any portion thereof as training data, fine-
+      tuning data, or input for any artificial intelligence, machine learning,
+      large language model, neural network, or automated system of any kind,
+      whether for commercial or non-commercial purposes.
+
+   j) CIRCUMVENTION: Circumvent, disable, or otherwise interfere with any
+      security features, access controls, license enforcement mechanisms, or
+      technical protection measures incorporated in the Software.
+
+   k) EXPORT: Export or re-export the Software in violation of any applicable
+      export control laws or regulations of Mexico or any other jurisdiction.
+
+   l) BENCHMARKING: Use the Software for benchmarking, competitive analysis, or
+      performance testing for the benefit of any third party or Competing Product.
+
+4. INTELLECTUAL PROPERTY OWNERSHIP
+
+   4.1 The Company retains all right, title, and interest in and to the Software
+       and all intellectual property rights therein. Nothing in this Agreement
+       shall be construed to grant any implied license or other rights to the
+       Software. All rights not expressly granted herein (none) are reserved by
+       the Company.
+
+   4.2 The following are exclusively owned by the Company:
+
+       - All source code, object code, compiled binaries, and build artifacts
+       - All database schemas, migrations, stored procedures, and seed data
+       - All UI/UX designs, wireframes, prototypes, design tokens, and brand assets
+       - All business logic, algorithms, data models, and data structures
+       - All documentation, specifications, technical materials, and ADRs
+       - All Supabase Edge Functions, cloud infrastructure configurations
+       - All API designs, integration patterns, and security architectures
+       - All trademarks, trade names, logos, and service marks of MenuOS
+       - All inventions, whether patentable or not, embodied in the Software
+       - All improvements, enhancements, and modifications made by anyone
+
+   4.3 Any work product, improvements, modifications, or Derivative Works created
+       by Authorized Personnel in connection with the Software are works made for
+       hire and shall be deemed assigned to and owned exclusively by the Company
+       from the moment of creation, without any further act or compensation.
+
+5. CONFIDENTIALITY
+
+   5.1 The Software contains highly valuable trade secrets and Confidential
+       Information of the Company. Authorized Personnel agree to:
+
+       a) Maintain strict confidentiality of all Confidential Information;
+       b) Use Confidential Information solely for purposes authorized by the
+          Company;
+       c) Not disclose Confidential Information to any third party without prior
+          written consent;
+       d) Apply no less than the highest standard of care to protect Confidential
+          Information — in no case less than the care used to protect their own
+          most sensitive confidential information;
+       e) Promptly notify the Company upon discovering any unauthorized disclosure
+          or use of Confidential Information;
+       f) Return or destroy all copies of the Software upon termination of their
+          authorized relationship with the Company.
+
+   5.2 Confidentiality obligations survive the termination of any agreement or
+       authorized relationship with the Company indefinitely.
+
+6. NON-COMPETE
+
+   Authorized Personnel who have had access to the Software agree that, for a
+   period of two (2) years following the termination of their authorized
+   relationship with the Company, they will not, directly or indirectly:
+
+   a) Develop, co-develop, or provide technical consulting services for any
+      Competing Product or service;
+   b) Use knowledge, architecture, designs, or concepts derived from the Software
+      to create or assist in creating any Competing Product;
+   c) Solicit or induce any employee, contractor, or customer of the Company to
+      terminate their relationship with the Company.
+
+   The parties acknowledge that the restrictions in this Section are reasonable
+   and necessary to protect the Company's legitimate business interests.
+
+7. AUDIT RIGHTS
+
+   The Company reserves the right, upon reasonable notice, to audit the systems
+   and records of any Authorized Personnel or entity to verify compliance with
+   this Agreement. Such audits shall be conducted at the Company's expense unless
+   a material breach is discovered, in which case the breaching party shall bear
+   all audit costs.
+
+8. NO WARRANTIES
+
+   THE SOFTWARE IS PROVIDED SOLELY FOR USE BY AUTHORIZED PERSONNEL IN ACCORDANCE
+   WITH THIS AGREEMENT. THE COMPANY MAKES NO WARRANTIES WHATSOEVER, EXPRESS OR
+   IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, OR
+   NON-INFRINGEMENT. THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
+   SOFTWARE RESTS WITH THE USER.
+
+9. LIMITATION OF LIABILITY
+
+   TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL THE
+   COMPANY OR ITS OFFICERS, DIRECTORS, EMPLOYEES, OR AGENTS BE LIABLE FOR ANY
+   INDIRECT, INCIDENTAL, SPECIAL, PUNITIVE, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+   (INCLUDING, WITHOUT LIMITATION, LOSS OF PROFITS, LOSS OF DATA, BUSINESS
+   INTERRUPTION, OR LOSS OF GOODWILL) ARISING OUT OF OR IN CONNECTION WITH THE
+   SOFTWARE OR THIS AGREEMENT, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
+   DAMAGES.
+
+10. INJUNCTIVE RELIEF
+
+    The parties acknowledge that any breach or threatened breach of this Agreement
+    would cause irreparable harm to the Company for which monetary damages would
+    be an inadequate remedy, and that the Company shall therefore be entitled, in
+    addition to all other remedies available at law or in equity, to seek
+    immediate injunctive and other equitable relief without the necessity of
+    proving actual damages or posting any bond or other security.
+
+11. REMEDIES FOR BREACH
+
+    In the event of any unauthorized access to, use, reproduction, modification,
+    distribution, or disclosure of the Software:
+
+    a) All rights and permissions, if any, granted to the breaching party are
+       immediately and automatically terminated without notice;
+    b) The Company is entitled to seek all available legal and equitable remedies,
+       including injunctive relief, actual damages, disgorgement of profits,
+       statutory damages, and attorney's fees;
+    c) The breaching party shall be liable for all costs and expenses (including
+       legal fees) incurred by the Company in enforcing its rights;
+    d) Civil liability under Mexican copyright law (Ley Federal del Derecho de
+       Autor), trade secret law (Ley Federal de Protección a la Propiedad
+       Industrial), and criminal liability under the Código Penal Federal may
+       apply.
+
+12. TERMINATION
+
+    12.1 Any authorization granted to Authorized Personnel terminates automatically
+         and immediately upon:
+
+         a) Breach of any provision of this Agreement;
+         b) Termination of the employment, contractor, or other authorized
+            relationship with the Company;
+         c) Written notice of termination by the Company for any reason.
+
+    12.2 Upon termination, the Authorized Personnel must immediately:
+
+         a) Cease all access to and use of the Software;
+         b) Delete or destroy all copies of the Software in their possession
+            or control;
+         c) Certify in writing to the Company that all copies have been deleted
+            or destroyed upon request.
+
+    12.3 Sections 4, 5, 6, 9, 10, 11, 13, and 14 survive termination indefinitely.
+
+13. GOVERNING LAW AND JURISDICTION
+
+    13.1 This Agreement shall be governed by and construed exclusively in
+         accordance with the laws of the United Mexican States (República
+         Mexicana), specifically including:
+
+         - Ley Federal del Derecho de Autor (LFDA)
+         - Ley Federal de Protección a la Propiedad Industrial (LFPPI)
+         - Código Civil Federal
+         - Código de Comercio
+         - Ley Federal de Protección de Datos Personales en Posesión de los
+           Particulares (LFPDPPP)
+
+    13.2 Any dispute, controversy, or claim arising out of or relating to this
+         Agreement, or the breach, termination, or validity thereof, shall be
+         subject to the exclusive jurisdiction of the federal courts (Tribunales
+         de la Federación) located in Mexico City (Ciudad de México), Mexico.
+         The parties hereby irrevocably waive any objection to such jurisdiction
+         and venue.
+
+    13.3 The prevailing party in any legal proceeding arising under this Agreement
+         shall be entitled to recover its reasonable attorney's fees and costs from
+         the non-prevailing party.
+
+14. GENERAL PROVISIONS
+
+    14.1 ENTIRE AGREEMENT: This Agreement constitutes the entire agreement between
+         the parties with respect to the Software and supersedes all prior or
+         contemporaneous understandings, representations, or agreements, whether
+         written or oral, regarding the subject matter hereof.
+
+    14.2 SEVERABILITY: If any provision of this Agreement is held invalid,
+         illegal, or unenforceable, such provision shall be modified to the
+         minimum extent necessary to make it enforceable, and the remaining
+         provisions shall remain in full force and effect.
+
+    14.3 NO WAIVER: The failure of the Company to enforce any right or provision
+         of this Agreement shall not constitute a waiver of such right or provision.
+         Any waiver must be in writing and signed by an authorized officer of the
+         Company.
+
+    14.4 AMENDMENT: This Agreement may only be amended by a written instrument
+         signed by an authorized officer of the Company.
+
+    14.5 ASSIGNMENT: This Agreement and any rights or obligations hereunder may
+         not be assigned, transferred, or sublicensed by any Authorized Personnel
+         without the prior written consent of the Company. The Company may freely
+         assign this Agreement.
+
+    14.6 NOTICES: All notices under this Agreement shall be in writing and
+         delivered to the Company at: legal@menuos.mx
+
+    14.7 HEADINGS: Section headings are for convenience only and shall not affect
+         the interpretation of this Agreement.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+UNAUTHORIZED ACCESS, USE, REPRODUCTION, MODIFICATION, DISTRIBUTION, OR
+DISCLOSURE OF THIS SOFTWARE IS STRICTLY PROHIBITED AND MAY RESULT IN SEVERE
+CIVIL AND CRIMINAL PENALTIES UNDER MEXICAN AND INTERNATIONAL LAW, INCLUDING
+IMPRISONMENT AND FINES.
+
+For licensing inquiries or to report unauthorized use:
+  Email: legal@menuos.mx
+
+© 2026 MenuOS. ALL RIGHTS RESERVED.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

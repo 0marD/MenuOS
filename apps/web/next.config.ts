@@ -1,32 +1,35 @@
-import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs';
+import type { NextConfig } from 'next';
 
-const config: NextConfig = {
-  transpilePackages: ['@menuos/ui', '@menuos/shared', '@menuos/database'],
+const nextConfig: NextConfig = {
+  transpilePackages: ['@menuos/ui', '@menuos/shared'],
   images: {
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**.supabase.co',
-      },
-      {
-        protocol: 'https',
-        hostname: '**.cloudflare.com',
-      },
+      { protocol: 'https', hostname: '*.supabase.co' },
+      { protocol: 'https', hostname: '*.supabase.in' },
+      { protocol: 'https', hostname: 'pub-*.r2.dev' },
     ],
   },
   experimental: {
-    optimizePackageImports: ['@menuos/ui', 'lucide-react'],
+    serverActions: {
+      bodySizeLimit: '5mb',
+    },
   },
 };
 
-export default withSentryConfig(config, {
+const sentryEnabled = !!process.env.SENTRY_AUTH_TOKEN;
+
+export default withSentryConfig(nextConfig, {
   org: process.env.SENTRY_ORG ?? '',
   project: process.env.SENTRY_PROJECT ?? '',
-  authToken: process.env.SENTRY_AUTH_TOKEN ?? '',
-  silent: true,
-  tunnelRoute: '/monitoring-tunnel',
+  silent: !process.env.CI,
+  widenClientFileUpload: sentryEnabled,
+  reactComponentAnnotation: { enabled: true },
+  tunnelRoute: '/monitoring',
+  hideSourceMaps: true,
+  automaticVercelMonitors: sentryEnabled,
   sourcemaps: {
-    disable: process.env.NODE_ENV !== 'production',
+    disable: !sentryEnabled,
   },
+  telemetry: false,
 });

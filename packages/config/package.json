@@ -1,19 +1,20 @@
 {
   "name": "@menuos/config",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
+  "type": "module",
   "exports": {
-    "./eslint": "./eslint.config.js",
+    "./tailwind.config": "./tailwind.config.ts",
+    "./eslint.config": "./eslint.config.js",
     "./typescript/base": "./typescript/base.json",
-    "./typescript/nextjs": "./typescript/nextjs.json",
-    "./tailwind": "./tailwind.config.ts"
-  },
-  "dependencies": {
-    "@eslint/eslintrc": "^3.2.0",
-    "eslint-config-next": "^15.1.6",
-    "typescript-eslint": "^8.20.0"
+    "./typescript/nextjs": "./typescript/nextjs.json"
   },
   "devDependencies": {
-    "tailwindcss": "^4.2.1"
+    "@eslint/js": "^9.17.0",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "^15.1.0",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.19.0"
   }
 }
