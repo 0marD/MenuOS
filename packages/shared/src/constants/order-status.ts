@@ -1,5 +1,13 @@
-export const ORDER_STATUSES = ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'] as const;
-export type OrderStatus = (typeof ORDER_STATUSES)[number];
+export const ORDER_STATUS = {
+  PENDING: 'pending',
+  CONFIRMED: 'confirmed',
+  PREPARING: 'preparing',
+  READY: 'ready',
+  DELIVERED: 'delivered',
+  CANCELLED: 'cancelled',
+} as const;
+
+export type OrderStatus = (typeof ORDER_STATUS)[keyof typeof ORDER_STATUS];
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   pending: 'Pendiente',
@@ -10,19 +18,11 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   cancelled: 'Cancelado',
 };
 
-export const TERMINAL_STATUSES: OrderStatus[] = ['delivered', 'cancelled'];
-export const ACTIVE_STATUSES: OrderStatus[] = ['pending', 'confirmed', 'preparing', 'ready'];
+export const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
+  ORDER_STATUS.PENDING,
+  ORDER_STATUS.CONFIRMED,
+  ORDER_STATUS.PREPARING,
+  ORDER_STATUS.READY,
+];
 
-export function isTerminalStatus(status: OrderStatus): boolean {
-  return TERMINAL_STATUSES.includes(status);
-}
-
-export function getNextStatus(status: OrderStatus): OrderStatus | null {
-  const flow: Partial<Record<OrderStatus, OrderStatus>> = {
-    pending: 'confirmed',
-    confirmed: 'preparing',
-    preparing: 'ready',
-    ready: 'delivered',
-  };
-  return flow[status] ?? null;
-}
+export const KDS_ALERT_MINUTES = 15;

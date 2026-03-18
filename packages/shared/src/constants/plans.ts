@@ -1,46 +1,42 @@
-export const PLAN_IDS = ['starter', 'pro', 'business'] as const;
-export type PlanId = (typeof PLAN_IDS)[number];
-
 export const PLANS = {
+  STARTER: 'starter',
+  PRO: 'pro',
+  BUSINESS: 'business',
+} as const;
+
+export type Plan = (typeof PLANS)[keyof typeof PLANS];
+
+export const PLAN_LIMITS = {
   starter: {
-    id: 'starter' as const,
-    name: 'Starter',
-    price: 499,
-    currency: 'MXN',
     branches: 1,
-    crmContacts: 200,
+    customers: 200,
     whatsappMessages: 50,
     automations: 0,
+    loyaltyPrograms: 0,
+    hasOrders: false,
   },
   pro: {
-    id: 'pro' as const,
-    name: 'Pro',
-    price: 999,
-    currency: 'MXN',
     branches: 2,
-    crmContacts: Infinity,
+    customers: Infinity,
     whatsappMessages: 500,
     automations: 5,
+    loyaltyPrograms: 1,
+    hasOrders: true,
   },
   business: {
-    id: 'business' as const,
-    name: 'Business',
-    price: 1899,
-    currency: 'MXN',
     branches: 5,
-    crmContacts: Infinity,
+    customers: Infinity,
     whatsappMessages: Infinity,
     automations: Infinity,
+    loyaltyPrograms: Infinity,
+    hasOrders: true,
   },
-} as const satisfies Record<PlanId, { id: PlanId; name: string; price: number; currency: string; branches: number; crmContacts: number; whatsappMessages: number; automations: number }>;
+} as const satisfies Record<Plan, object>;
 
-export type Plan = (typeof PLANS)[PlanId];
+export const PLAN_PRICES_MXN = {
+  starter: 499,
+  pro: 999,
+  business: 1899,
+} as const satisfies Record<Plan, number>;
 
-export function getPlanLimit(planId: PlanId, key: keyof Omit<Plan, 'id' | 'name' | 'currency'>): number {
-  return PLANS[planId][key];
-}
-
-export function isWithinPlanLimit(planId: PlanId, key: keyof Omit<Plan, 'id' | 'name' | 'currency'>, current: number): boolean {
-  const limit = getPlanLimit(planId, key);
-  return limit === Infinity || current < limit;
-}
+export const TRIAL_DAYS = 14;

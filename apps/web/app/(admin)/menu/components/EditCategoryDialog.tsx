@@ -1,86 +1,142 @@
 'use client';
 
-import { useTransition } from 'react';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { X } from 'lucide-react';
-import { Button } from '@menuos/ui/atoms/Button';
-import { FormField } from '@menuos/ui/molecules/FormField';
-import { menuCategorySchema, type MenuCategoryInput } from '@menuos/shared/validations';
+import { Pencil } from 'lucide-react';
+import { useState, useTransition } from 'react';
+import { useForm } from 'react-hook-form';
+import { Button, FormField, Input, Switch } from '@menuos/ui';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { categorySchema, type CategoryInput } from '@menuos/shared';
+import type { Tables } from '@menuos/database';
 import { updateCategory } from '../actions';
-import type { Tables } from '@menuos/database/types';
 
 interface EditCategoryDialogProps {
   category: Tables<'menu_categories'>;
-  onUpdated: (category: Tables<'menu_categories'>) => void;
-  onClose: () => void;
 }
 
-export function EditCategoryDialog({ category, onUpdated, onClose }: EditCategoryDialogProps) {
+export function EditCategoryDialog({ category }: EditCategoryDialogProps) {
+  const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
+    setError,
     formState: { errors },
-  } = useForm<MenuCategoryInput>({
-    resolver: zodResolver(menuCategorySchema),
+  } = useForm<CategoryInput>({
+    resolver: zodResolver(categorySchema),
     defaultValues: {
       name: category.name,
-      icon: category.icon ?? undefined,
-      sort_order: category.sort_order,
+      icon: category.icon ?? '',
+      color: category.color ?? '',
       is_visible: category.is_visible,
     },
   });
 
-  function onSubmit(data: MenuCategoryInput) {
+  const isVisible = watch('is_visible');
+
+  function onSubmit(data: CategoryInput) {
     startTransition(async () => {
       const result = await updateCategory(category.id, data);
-      if (result.data) {
-        onUpdated(result.data);
+      if (result?.error) {
+        setError('root', { message: result.error });
+        return;
       }
+      setOpen(false);
     });
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="edit-category-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
-    >
-      <div className="w-full max-w-sm rounded-xl bg-paper p-5 shadow-lg">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 id="edit-category-title" className="font-display text-lg font-bold text-ink">
-            Editar categoría
-          </h2>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Cerrar">
-            <X className="h-4 w-4" aria-hidden="true" />
-          </Button>
-        </div>
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3">
-          <FormField
-            label="Nombre"
-            required
-            error={errors.name?.message}
-            {...register('name')}
-          />
-          <FormField
-            label="Ícono (emoji)"
-            placeholder="🌮"
-            error={errors.icon?.message}
-            {...register('icon')}
-          />
-          <div className="mt-2 flex gap-2">
-            <Button type="button" variant="outline" className="flex-1" onClick={onClose}>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <button
+          className="rounded p-1.5 text-muted transition-colors hover:bg-cream hover:text-ink"
+          aria-label={`Editar ${category.name}`}
+        >
+          <Pencil className="h-4 w-4" />
+        </button>
+      </DialogTrigger>
+
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Editar categoría</DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
+          <FormField label="Nombre" htmlFor="edit-cat-name" error={errors.name?.message} required>
+            <Input
+              id="edit-cat-name"
+              error={!!errors.name}
+              autoFocus
+              {...register('name')}
+            />
+          </FormField>
+
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label="Ícono (emoji)" htmlFor="edit-cat-icon" error={errors.icon?.message}>
+              <Input
+                id="edit-cat-icon"
+                maxLength={4}
+                className="text-xl"
+                {...register('icon')}
+              />
+            </FormField>
+
+            <FormField label="Color (hex)" htmlFor="edit-cat-color" error={errors.color?.message}>
+              <div className="flex gap-2">
+                <Input
+                  id="edit-cat-color"
+                  maxLength={7}
+                  {...register('color')}
+                />
+                <input
+                  type="color"
+                  defaultValue={category.color ?? '#D4500A'}
+                  className="h-10 w-10 shrink-0 cursor-pointer rounded border border-rule"
+                  onChange={(e) => setValue('color', e.target.value)}
+                  aria-label="Seleccionar color"
+                />
+              </div>
+            </FormField>
+          </div>
+
+          <div className="flex items-center justify-between rounded border border-rule px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-ink">Visible en el menú</p>
+              <p className="text-xs text-muted">Los comensales pueden verla</p>
+            </div>
+            <Switch
+              checked={isVisible}
+              onCheckedChange={(v) => setValue('is_visible', v)}
+              aria-label="Visibilidad de la categoría"
+            />
+          </div>
+
+          {errors.root && (
+            <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-600">
+              {errors.root.message}
+            </p>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
               Cancelar
             </Button>
-            <Button type="submit" className="flex-1" disabled={isPending}>
-              {isPending ? 'Guardando...' : 'Guardar'}
+            <Button type="submit" disabled={isPending}>
+              {isPending ? 'Guardando…' : 'Guardar cambios'}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,58 +1,61 @@
 'use server';
 
+import { cookies } from 'next/headers';
+import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { requireAuthSession } from '@/lib/auth/get-session';
 
-export async function markItemReady(
-  itemId: string,
-  orderId: string
-): Promise<{ success: boolean }> {
-  try {
-    const session = await requireAuthSession();
-    if (!['kitchen', 'manager', 'super_admin'].includes(session.role)) {
-      return { success: false };
-    }
-  } catch {
-    return { success: false };
-  }
-
+export async function markItemReady(itemId: string) {
   const supabase = await createClient();
 
-  await supabase.from('order_items').update({ is_ready: true }).eq('id', itemId);
+  const { error } = await supabase
+    .from('order_items')
+    .update({ is_ready: true })
+    .eq('id', itemId);
 
-  // Transition order to 'preparing' if still 'confirmed'
-  await supabase
+  if (error) return { error: 'Error al marcar ítem.' };
+  revalidatePath('/kitchen');
+}
+
+export async function startPreparing(orderId: string) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
     .from('orders')
     .update({ status: 'preparing' })
     .eq('id', orderId)
     .eq('status', 'confirmed');
 
-  return { success: true };
+  if (error) return { error: 'Error al actualizar pedido.' };
+  revalidatePath('/kitchen');
 }
 
-export async function markTicketReady(orderId: string): Promise<{ success: boolean }> {
-  try {
-    const session = await requireAuthSession();
-    if (!['kitchen', 'manager', 'super_admin'].includes(session.role)) {
-      return { success: false };
-    }
-  } catch {
-    return { success: false };
-  }
+export async function markOrderReadyKitchen(orderId: string) {
+  const jar = await cookies();
+  const branchId = jar.get('menuos_branch_id')?.value;
 
   const supabase = await createClient();
 
+  // Mark all items ready first
   await supabase.from('order_items').update({ is_ready: true }).eq('order_id', orderId);
 
-  await supabase
+  const { error } = await supabase
     .from('orders')
     .update({ status: 'ready', ready_at: new Date().toISOString() })
     .eq('id', orderId);
 
-  await supabase.from('order_status_history').insert({
-    order_id: orderId,
-    status: 'ready',
-  });
+  if (error) return { error: 'Error al marcar pedido como listo.' };
 
-  return { success: true };
+  // Notify waiter that order is ready
+  if (branchId) {
+    void supabase.functions.invoke('send-push', {
+      body: {
+        branch_id: branchId,
+        role: 'waiter',
+        title: '✅ Pedido listo',
+        body: `Pedido #${orderId.slice(-6).toUpperCase()} está listo para servir`,
+      },
+    });
+  }
+
+  revalidatePath('/kitchen');
 }

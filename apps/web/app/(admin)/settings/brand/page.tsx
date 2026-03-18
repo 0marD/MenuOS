@@ -1,44 +1,21 @@
 import type { Metadata } from 'next';
+import { requireAdminSession } from '@/lib/auth/get-session';
 import { createClient } from '@/lib/supabase/server';
 import { BrandSettingsForm } from './BrandSettingsForm';
 
-export const metadata: Metadata = { title: 'Marca — Configuración' };
+export const metadata: Metadata = { title: 'Marca' };
 
-export default async function BrandPage() {
+export default async function BrandSettingsPage() {
+  const { org: sessionOrg } = await requireAdminSession();
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: staffUser } = await supabase
-    .from('staff_users')
-    .select('organization_id')
-    .eq('auth_user_id', user.id)
-    .single();
-
-  if (!staffUser) return null;
 
   const { data: org } = await supabase
     .from('organizations')
-    .select('id, name, slug, logo_url, banner_url, colors')
-    .eq('id', staffUser.organization_id)
+    .select('name, slug, logo_url, banner_url, primary_color, secondary_color')
+    .eq('id', sessionOrg.id)
     .single();
 
-  const { data: templates } = await supabase
-    .from('design_templates')
-    .select('id, name, slug, preview_url');
+  if (!org) return null;
 
-  const { data: currentTemplate } = await supabase
-    .from('org_settings')
-    .select('value')
-    .eq('organization_id', staffUser.organization_id)
-    .eq('key', 'design_template')
-    .single();
-
-  return (
-    <BrandSettingsForm
-      org={org ?? { id: '', name: '', slug: '', logo_url: null, banner_url: null, colors: null }}
-      templates={templates ?? []}
-      currentTemplateSlug={currentTemplate?.value ?? 'classic'}
-    />
-  );
+  return <BrandSettingsForm org={org} />;
 }

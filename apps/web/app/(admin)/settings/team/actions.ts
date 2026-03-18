@@ -1,103 +1,99 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { requireAdminSession } from '@/lib/auth/get-session';
 import { createClient } from '@/lib/supabase/server';
-import { staffUserSchema, type StaffUserInput } from '@menuos/shared/validations';
-import { generatePin } from '@menuos/shared/utils';
+import { generatePin } from '@menuos/shared';
 import { hashPin } from '@/lib/auth/hash-pin';
-import { requireAuthSession } from '@/lib/auth/get-session';
+import type { StaffMemberInput } from '@menuos/shared';
 
-export async function createStaffMember(
-  orgId: string,
-  data: StaffUserInput
-): Promise<{ success: boolean; error?: string; id?: string; pin?: string }> {
-  try {
-    const session = await requireAuthSession();
-    if (session.orgId !== orgId || !['super_admin', 'manager'].includes(session.role)) {
-      return { success: false, error: 'Sin autorización' };
-    }
-  } catch {
-    return { success: false, error: 'Sin autorización' };
-  }
-
-  const parsed = staffUserSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: 'Datos inválidos' };
-
+export async function createStaffMember(data: StaffMemberInput) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
-  const needsPin = parsed.data.role === 'waiter' || parsed.data.role === 'kitchen';
-  const pin = needsPin ? generatePin() : undefined;
 
-  let pinHash: string | undefined;
-  try {
-    pinHash = pin ? await hashPin(pin) : undefined;
-  } catch {
-    return { success: false, error: 'Error de configuración del servidor' };
-  }
+  const pin = generatePin();
+  const pinHash = await hashPin(pin);
 
   const { data: member, error } = await supabase
     .from('staff_users')
     .insert({
-      organization_id: orgId,
-      name: parsed.data.name,
-      email: parsed.data.email ?? null,
-      role: parsed.data.role,
-      branch_id: parsed.data.branch_id ?? null,
-      pin_hash: pinHash ?? null,
+      organization_id: org.id,
+      name: data.name,
+      email: data.email || null,
+      role: data.role,
+      branch_ids: data.branch_ids,
+      pin_hash: pinHash,
     })
     .select('id')
     .single();
 
-  if (error) return { success: false, error: 'No se pudo crear el miembro' };
+  if (error || !member) return { error: 'Error al crear el miembro.' };
 
-  revalidatePath('/admin/settings/team');
-  if (pin) return { success: true, id: member.id, pin };
-  return { success: true, id: member.id };
+  revalidatePath('/settings/team');
+  return { pin };
 }
 
-export async function deleteStaffMember(id: string): Promise<{ success: boolean }> {
-  try {
-    await requireAuthSession();
-  } catch {
-    return { success: false };
-  }
+export async function updateStaffMember(id: string, data: Partial<StaffMemberInput>) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
-  await supabase
+
+  const { error } = await supabase
     .from('staff_users')
-    .update({ deleted_at: new Date().toISOString(), is_active: false })
-    .eq('id', id);
-  revalidatePath('/admin/settings/team');
-  return { success: true };
+    .update({
+      ...(data.name !== undefined ? { name: data.name } : {}),
+      email: data.email || null,
+      ...(data.role !== undefined ? { role: data.role } : {}),
+      ...(data.branch_ids !== undefined ? { branch_ids: data.branch_ids } : {}),
+    })
+    .eq('id', id)
+    .eq('organization_id', org.id);
+
+  if (error) return { error: 'Error al actualizar el miembro.' };
+  revalidatePath('/settings/team');
 }
 
-export async function toggleStaffActive(id: string, active: boolean): Promise<{ success: boolean }> {
-  try {
-    await requireAuthSession();
-  } catch {
-    return { success: false };
-  }
+export async function toggleStaffActive(id: string, isActive: boolean) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
-  await supabase.from('staff_users').update({ is_active: active }).eq('id', id);
-  revalidatePath('/admin/settings/team');
-  return { success: true };
+
+  const { error } = await supabase
+    .from('staff_users')
+    .update({ is_active: isActive })
+    .eq('id', id)
+    .eq('organization_id', org.id);
+
+  if (error) return { error: 'Error al cambiar estado.' };
+  revalidatePath('/settings/team');
 }
 
-export async function regeneratePin(id: string): Promise<{ pin?: string; success: boolean }> {
-  try {
-    await requireAuthSession();
-  } catch {
-    return { success: false };
-  }
+export async function deleteStaffMember(id: string) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
+
+  const { error } = await supabase
+    .from('staff_users')
+    .delete()
+    .eq('id', id)
+    .eq('organization_id', org.id);
+
+  if (error) return { error: 'Error al eliminar el miembro.' };
+  revalidatePath('/settings/team');
+}
+
+export async function regeneratePin(id: string) {
+  const { org } = await requireAdminSession();
+  const supabase = await createClient();
+
   const pin = generatePin();
+  const pinHash = await hashPin(pin);
 
-  let pinHash: string;
-  try {
-    pinHash = await hashPin(pin);
-  } catch {
-    return { success: false };
-  }
+  const { error } = await supabase
+    .from('staff_users')
+    .update({ pin_hash: pinHash })
+    .eq('id', id)
+    .eq('organization_id', org.id);
 
-  const { error } = await supabase.from('staff_users').update({ pin_hash: pinHash }).eq('id', id);
-  if (error) return { success: false };
-  return { success: true, pin };
+  if (error) return { error: 'Error al regenerar PIN.' };
+  revalidatePath('/settings/team');
+  return { pin };
 }

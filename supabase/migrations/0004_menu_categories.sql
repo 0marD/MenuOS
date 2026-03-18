@@ -1,25 +1,19 @@
--- Migration: menu_categories
--- Phase 0.13
-
-create table public.menu_categories (
-  id               uuid primary key default gen_random_uuid(),
-  organization_id  uuid not null references public.organizations(id) on delete cascade,
-  name             text not null,
-  icon             text,
-  color            text,
-  sort_order       integer not null default 0,
-  is_visible       boolean not null default true,
-  schedule_start   time,
-  schedule_end     time,
-  deleted_at       timestamptz,
-  created_at       timestamptz not null default now(),
-  updated_at       timestamptz not null default now()
+CREATE TABLE menu_categories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  icon TEXT,
+  color TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_visible BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ
 );
 
-create index menu_categories_org_idx on public.menu_categories (organization_id, sort_order) where deleted_at is null;
+CREATE TRIGGER menu_categories_updated_at
+  BEFORE UPDATE ON menu_categories
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-alter table public.menu_categories enable row level security;
-
-create trigger menu_categories_updated_at
-  before update on public.menu_categories
-  for each row execute function public.set_updated_at();
+CREATE INDEX idx_menu_categories_org ON menu_categories(organization_id, sort_order)
+  WHERE deleted_at IS NULL;

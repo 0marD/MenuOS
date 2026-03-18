@@ -4,26 +4,23 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'MenuOS',
     short_name: 'MenuOS',
-    description: 'El menú digital de tu restaurante favorito',
+    description: 'Sistema operativo para restaurantes independientes',
     start_url: '/',
     display: 'standalone',
     background_color: '#F5F0E8',
     theme_color: '#0F0E0C',
-    orientation: 'portrait',
     icons: [
       {
-        src: '/icons/icon-192.png',
+        src: '/android-chrome-192x192.png',
         sizes: '192x192',
         type: 'image/png',
-        purpose: 'any',
       },
       {
-        src: '/icons/icon-512.png',
+        src: '/android-chrome-512x512.png',
         sizes: '512x512',
         type: 'image/png',
         purpose: 'maskable',
       },
     ],
-    categories: ['food', 'lifestyle'],
   };
 }

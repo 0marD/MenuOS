@@ -3,86 +3,85 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import {
-  loginSchema,
-  registerSchema,
-  type LoginInput,
-  type RegisterInput,
-} from '@menuos/shared/validations';
-import { generateSlug } from '@menuos/shared/utils';
+import { generateSlug } from '@menuos/shared';
+import type { LoginInput, RegisterInput } from '@menuos/shared';
 
-export async function login(formData: LoginInput): Promise<{ error?: string } | never> {
-  const parsed = loginSchema.safeParse(formData);
-  if (!parsed.success) return { error: 'Datos inválidos' };
-
+export async function login(data: LoginInput) {
   const supabase = await createClient();
+
   const { error } = await supabase.auth.signInWithPassword({
-    email: parsed.data.email,
-    password: parsed.data.password,
+    email: data.email,
+    password: data.password,
   });
 
-  if (error) return { error: 'Email o contraseña incorrectos' };
+  if (error) {
+    return { error: 'Credenciales incorrectas. Verifica tu email y contraseña.' };
+  }
 
   revalidatePath('/', 'layout');
-  redirect('/admin/dashboard');
+  redirect('/dashboard');
 }
 
-export async function register(formData: RegisterInput): Promise<{ error?: string } | never> {
-  const parsed = registerSchema.safeParse(formData);
-  if (!parsed.success) return { error: 'Datos inválidos' };
-
+export async function register(data: RegisterInput) {
   const supabase = await createClient();
 
   const { data: authData, error: signUpError } = await supabase.auth.signUp({
-    email: parsed.data.email,
-    password: parsed.data.password,
+    email: data.email,
+    password: data.password,
   });
 
-  if (signUpError) {
-    if (signUpError.message.includes('already')) {
-      return { error: 'Este email ya está registrado' };
-    }
-    return { error: signUpError.message };
+  if (signUpError || !authData.user) {
+    return { error: signUpError?.message ?? 'Error al crear la cuenta.' };
   }
 
-  if (!authData.user) return { error: 'Error al crear la cuenta' };
-
-  const slug = generateSlug(parsed.data.orgName);
+  const slug = generateSlug(data.restaurantName);
 
   const { data: org, error: orgError } = await supabase
     .from('organizations')
     .insert({
-      name: parsed.data.orgName,
+      name: data.restaurantName,
       slug,
-      plan: 'starter',
-      subscription_status: 'trialing',
     })
     .select()
     .single();
 
-  if (orgError) return { error: 'Error al crear la organización' };
+  if (orgError || !org) {
+    return { error: 'Error al crear el restaurante. Intenta de nuevo.' };
+  }
 
-  await supabase.from('staff_users').insert({
+  const { error: staffError } = await supabase.from('staff_users').insert({
+    auth_id: authData.user.id,
     organization_id: org.id,
-    auth_user_id: authData.user.id,
-    name: parsed.data.name,
-    email: parsed.data.email,
+    name: data.name,
+    email: data.email,
     role: 'super_admin',
+    branch_ids: [],
   });
 
+  if (staffError) {
+    return { error: 'Error al configurar el perfil.' };
+  }
+
   revalidatePath('/', 'layout');
-  redirect('/admin/dashboard');
+  redirect('/dashboard');
 }
 
-export async function logout(): Promise<never> {
+export async function logout() {
   const supabase = await createClient();
   await supabase.auth.signOut();
-  revalidatePath('/', 'layout');
   redirect('/auth/login');
 }
 
-export async function getUser() {
+export async function sendPasswordReset(email: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/reset-password`,
+  });
+
+  if (error) {
+    return { error: 'Error al enviar el correo de recuperación.' };
+  }
+
+  return { success: true };
 }

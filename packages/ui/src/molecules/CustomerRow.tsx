@@ -1,75 +1,64 @@
 import * as React from 'react';
 import { cn } from '../lib/utils';
-import { Avatar, AvatarFallback } from '../atoms/Avatar';
 import { Badge } from '../atoms/Badge';
 
-type CustomerSegment = 'new' | 'frequent' | 'dormant';
+type Segment = 'new' | 'frequent' | 'dormant';
+
+const segmentConfig: Record<Segment, { label: string; variant: 'default' | 'success' | 'muted' }> = {
+  new: { label: 'Nuevo', variant: 'default' },
+  frequent: { label: 'Frecuente', variant: 'success' },
+  dormant: { label: 'Dormido', variant: 'muted' },
+};
 
 interface CustomerRowProps {
   name: string;
-  maskedPhone: string;
-  segment: CustomerSegment;
+  phone: string;
+  segment: Segment;
   visitCount: number;
-  lastVisit: Date;
+  lastVisit: string;
   onClick?: () => void;
   className?: string;
 }
 
-const segmentConfig: Record<CustomerSegment, { label: string; badgeVariant: 'available' | 'highlight' | 'soldOut' }> = {
-  new: { label: 'Nuevo', badgeVariant: 'available' },
-  frequent: { label: 'Frecuente', badgeVariant: 'highlight' },
-  dormant: { label: 'Dormido', badgeVariant: 'soldOut' },
-};
-
-function CustomerRow({
+export function CustomerRow({
   name,
-  maskedPhone,
+  phone,
   segment,
   visitCount,
   lastVisit,
   onClick,
   className,
 }: CustomerRowProps) {
-  const config = segmentConfig[segment];
+  const { label, variant } = segmentConfig[segment];
   const initials = name
     .split(' ')
     .slice(0, 2)
-    .map((n) => n[0])
+    .map((w) => w[0])
     .join('')
     .toUpperCase();
-
-  const formattedDate = new Intl.DateTimeFormat('es-MX', {
-    day: 'numeric',
-    month: 'short',
-  }).format(lastVisit);
 
   return (
     <div
       className={cn(
-        'flex items-center gap-3 rounded-lg p-3 transition-colors',
+        'flex items-center gap-4 border-b border-rule px-4 py-3 last:border-0',
         onClick && 'cursor-pointer hover:bg-cream',
-        className
+        className,
       )}
       onClick={onClick}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
     >
-      <Avatar className="h-9 w-9">
-        <AvatarFallback>{initials}</AvatarFallback>
-      </Avatar>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium font-sans text-foreground">{name}</p>
-        <p className="text-xs font-mono text-muted">{maskedPhone}</p>
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cream font-mono text-xs text-muted">
+        {initials}
       </div>
-      <div className="flex items-center gap-3 text-right">
-        <div className="hidden sm:block">
-          <p className="text-xs font-sans text-muted">{visitCount} visitas</p>
-          <p className="text-xs font-mono text-muted">{formattedDate}</p>
-        </div>
-        <Badge variant={config.badgeVariant}>{config.label}</Badge>
+      <div className="flex flex-1 flex-col gap-0.5 min-w-0">
+        <p className="truncate text-sm font-medium text-ink">{name}</p>
+        <p className="font-mono text-xs text-muted">{phone}</p>
+      </div>
+      <div className="hidden sm:flex flex-col items-end gap-1">
+        <Badge variant={variant}>{label}</Badge>
+        <span className="font-mono text-[10px] text-muted">
+          {visitCount} visitas · {lastVisit}
+        </span>
       </div>
     </div>
   );
 }
-
-export { CustomerRow, type CustomerSegment };

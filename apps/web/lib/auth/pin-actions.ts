@@ -1,51 +1,63 @@
 'use server';
 
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { hashPin } from './hash-pin';
+import { verifyPin } from './hash-pin';
 
-export async function loginWithPin(
-  pin: string,
-  branchId?: string
-): Promise<{ error: string } | never> {
-  if (!/^\d{4}$/.test(pin)) return { error: 'PIN inválido' };
-
-  let pinHash: string;
-  try {
-    pinHash = await hashPin(pin);
-  } catch {
-    return { error: 'Error de configuración del servidor' };
-  }
-
+export async function loginWithPin(data: { pin: string; branchId: string }) {
   const supabase = await createClient();
 
-  const { data: matches } = await supabase
+  const { data: staffUsers } = await supabase
     .from('staff_users')
-    .select('id, organization_id, role, name, branch_id')
-    .eq('pin_hash', pinHash)
+    .select('*')
+    .contains('branch_ids', [data.branchId])
+    .in('role', ['waiter', 'kitchen'])
     .eq('is_active', true)
-    .is('deleted_at', null)
-    .in('role', ['waiter', 'kitchen']);
+    .not('pin_hash', 'is', null);
 
-  if (!matches || matches.length === 0) {
-    return { error: 'PIN incorrecto' };
+  if (!staffUsers || staffUsers.length === 0) {
+    return { error: 'PIN incorrecto.' };
   }
 
-  const staff =
-    (branchId ? matches.find((m) => m.branch_id === branchId) : null) ?? matches[0];
+  let matchedUser = null;
+  for (const user of staffUsers) {
+    if (user.pin_hash && (await verifyPin(data.pin, user.pin_hash))) {
+      matchedUser = user;
+      break;
+    }
+  }
 
-  if (!staff) return { error: 'PIN incorrecto para esta sucursal' };
+  if (!matchedUser) {
+    return { error: 'PIN incorrecto.' };
+  }
 
-  redirect(staff.role === 'kitchen' ? '/kitchen' : '/waiter');
+  const cookieStore = await cookies();
+  cookieStore.set('menuos_staff_id', matchedUser.id, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 12, // 12 hours
+    path: '/',
+  });
+  cookieStore.set('menuos_branch_id', data.branchId, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 12,
+    path: '/',
+  });
+
+  if (matchedUser.role === 'kitchen') {
+    redirect('/kitchen');
+  } else {
+    redirect('/waiter');
+  }
 }
 
-export async function getPinBranches(): Promise<Array<{ id: string; name: string }>> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from('branches')
-    .select('id, name')
-    .eq('is_active', true)
-    .is('deleted_at', null)
-    .order('name');
-  return data ?? [];
+export async function logoutPin() {
+  const cookieStore = await cookies();
+  cookieStore.delete('menuos_staff_id');
+  cookieStore.delete('menuos_branch_id');
+  redirect('/auth/pin');
 }

@@ -1,8 +1,9 @@
 {
   "extends": "@menuos/config/typescript/base",
   "compilerOptions": {
-    "baseUrl": "."
+    "rootDir": ".",
+    "noEmit": true
   },
-  "include": ["types/**/*.ts"],
+  "include": ["types"],
   "exclude": ["node_modules"]
 }

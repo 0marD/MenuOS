@@ -1,39 +1,47 @@
 import { z } from 'zod';
-import { SLUG_REGEX, PLAN_IDS } from '../constants';
 
-export const organizationSchema = z.object({
-  name: z.string().min(2).max(100),
-  slug: z.string().regex(SLUG_REGEX, 'Solo letras, números y guiones').min(3).max(50),
-  logo_url: z.string().url().optional(),
-  banner_url: z.string().url().optional(),
-  plan: z.enum(PLAN_IDS),
+export const brandSettingsSchema = z.object({
+  name: z.string().min(2, 'Mínimo 2 caracteres').max(100),
+  logo_url: z.string().url('URL inválida').optional().or(z.literal('')),
+  banner_url: z.string().url('URL inválida').optional().or(z.literal('')),
+  primary_color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, 'Color inválido')
+    .optional(),
+  secondary_color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, 'Color inválido')
+    .optional(),
 });
 
 export const branchSchema = z.object({
-  name: z.string().min(2).max(100),
-  address: z.string().min(5).max(300).optional(),
+  name: z.string().min(1, 'Nombre requerido').max(100),
+  address: z.string().max(300).optional(),
+  phone: z.string().max(20).optional(),
   timezone: z.string().default('America/Mexico_City'),
-  is_active: z.boolean().default(true),
 });
 
-export const orgBrandSchema = z.object({
-  logo_url: z.string().url().optional(),
-  banner_url: z.string().url().optional(),
-  colors: z.object({
-    primary: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-    secondary: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
-  }).optional(),
-  template_slug: z.string().optional(),
+export const scheduleSchema = z.object({
+  day_of_week: z.number().int().min(0).max(6),
+  opens_at: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, 'Formato HH:MM requerido')
+    .optional(),
+  closes_at: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, 'Formato HH:MM requerido')
+    .optional(),
+  is_closed: z.boolean().default(false),
 });
 
-export const staffUserSchema = z.object({
-  name: z.string().min(2).max(100),
-  email: z.string().email().optional(),
+export const staffMemberSchema = z.object({
+  name: z.string().min(1, 'Nombre requerido').max(100),
+  email: z.string().email('Email inválido').optional().or(z.literal('')),
   role: z.enum(['super_admin', 'manager', 'waiter', 'kitchen']),
-  branch_id: z.string().uuid().optional(),
+  branch_ids: z.array(z.string().uuid()).default([]),
 });
 
-export type OrganizationInput = z.infer<typeof organizationSchema>;
+export type BrandSettingsInput = z.infer<typeof brandSettingsSchema>;
 export type BranchInput = z.infer<typeof branchSchema>;
-export type OrgBrandInput = z.infer<typeof orgBrandSchema>;
-export type StaffUserInput = z.infer<typeof staffUserSchema>;
+export type ScheduleInput = z.infer<typeof scheduleSchema>;
+export type StaffMemberInput = z.infer<typeof staffMemberSchema>;

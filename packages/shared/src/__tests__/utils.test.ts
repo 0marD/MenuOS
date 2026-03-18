@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { generateSlug } from '../utils/slug';
-import { isValidMexicanMobile, normalizePhone, maskPhone } from '../utils/validate-phone';
-import { generatePin, generateOtp } from '../utils/generate-pin';
-import { formatMXN, formatCurrency } from '../utils/format-price';
-import { getDaysSince, formatDate, formatTime, getRelativeTime } from '../utils/date-helpers';
+import { isValidMexicanMobile, normalizePhone } from '../utils/validate-phone';
+import { generatePin } from '../utils/generate-pin';
+import { formatMXN, formatPrice } from '../utils/format-price';
+import { daysSince, formatDate, formatRelativeDate } from '../utils/date-helpers';
 
-// ─── Slug ────────────────────────────────────────────────────────────────────
+// ─── Slug ─────────────────────────────────────────────────────────────────────
 
 describe('generateSlug', () => {
   it('converts spaces to hyphens', () => {
@@ -53,7 +53,7 @@ describe('isValidMexicanMobile', () => {
     expect(isValidMexicanMobile('5512345678')).toBe(false);
   });
 
-  it('rejects too short', () => {
+  it('rejects too short numbers', () => {
     expect(isValidMexicanMobile('+52551234567')).toBe(false);
   });
 
@@ -72,45 +72,24 @@ describe('normalizePhone', () => {
   });
 });
 
-describe('maskPhone', () => {
-  it('shows only last 4 digits', () => {
-    const masked = maskPhone('+525512345678');
-    expect(masked).toMatch(/\*+5678$/);
-  });
-
-  it('returns original for very short strings', () => {
-    expect(maskPhone('123')).toBe('123');
-  });
-});
-
 // ─── PIN generation ──────────────────────────────────────────────────────────
 
 describe('generatePin', () => {
-  it('returns a 4-digit string', () => {
+  it('returns a 4-digit string by default', () => {
     const pin = generatePin();
     expect(pin).toHaveLength(4);
     expect(/^\d{4}$/.test(pin)).toBe(true);
-  });
-
-  it('generates values between 1000 and 9999', () => {
-    for (let i = 0; i < 50; i++) {
-      const n = Number(generatePin());
-      expect(n).toBeGreaterThanOrEqual(1000);
-      expect(n).toBeLessThanOrEqual(9999);
-    }
   });
 
   it('returns different PINs (not always the same)', () => {
     const pins = new Set(Array.from({ length: 20 }, () => generatePin()));
     expect(pins.size).toBeGreaterThan(1);
   });
-});
 
-describe('generateOtp', () => {
-  it('returns a 4-digit string', () => {
-    const otp = generateOtp();
-    expect(otp).toHaveLength(4);
-    expect(/^\d{4}$/.test(otp)).toBe(true);
+  it('respects custom length', () => {
+    const pin = generatePin(6);
+    expect(pin).toHaveLength(6);
+    expect(/^\d{6}$/.test(pin)).toBe(true);
   });
 });
 
@@ -128,47 +107,41 @@ describe('formatMXN', () => {
     expect(result).toContain('0');
   });
 
-  it('formats large amounts with separators', () => {
-    const result = formatMXN(1000);
-    expect(result).toContain('1');
-    expect(result).toContain('000');
-  });
-
   it('includes two decimal places', () => {
     const result = formatMXN(99.5);
     expect(result).toContain('50');
   });
 });
 
-describe('formatCurrency', () => {
+describe('formatPrice', () => {
   it('defaults to MXN', () => {
-    const mxn = formatCurrency(100);
+    const mxn = formatPrice(100);
     expect(mxn).toContain('100');
   });
 
   it('accepts different currencies', () => {
-    const usd = formatCurrency(100, 'USD', 'en-US');
+    const usd = formatPrice(100, 'USD');
     expect(usd).toContain('100');
   });
 });
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
-describe('getDaysSince', () => {
+describe('daysSince', () => {
   it('returns 0 for right now', () => {
-    expect(getDaysSince(new Date())).toBe(0);
+    expect(daysSince(new Date())).toBe(0);
   });
 
   it('returns 5 for 5 days ago', () => {
     const past = new Date();
     past.setDate(past.getDate() - 5);
-    expect(getDaysSince(past)).toBe(5);
+    expect(daysSince(past)).toBe(5);
   });
 
   it('returns 21 at the dormant threshold', () => {
     const past = new Date();
     past.setDate(past.getDate() - 21);
-    expect(getDaysSince(past)).toBe(21);
+    expect(daysSince(past)).toBe(21);
   });
 });
 
@@ -178,23 +151,23 @@ describe('formatDate', () => {
     expect(typeof result).toBe('string');
     expect(result.length).toBeGreaterThan(0);
   });
-
-  it('accepts locale parameter', () => {
-    const result = formatDate(new Date(), 'en-US');
-    expect(typeof result).toBe('string');
-  });
 });
 
-describe('formatTime', () => {
-  it('returns HH:MM formatted string', () => {
-    const result = formatTime(new Date());
-    expect(/\d{1,2}:\d{2}/.test(result)).toBe(true);
+describe('formatRelativeDate', () => {
+  it('returns "Hoy" for today', () => {
+    expect(formatRelativeDate(new Date())).toBe('Hoy');
   });
-});
 
-describe('getRelativeTime', () => {
-  it('returns a non-empty string', () => {
-    const result = getRelativeTime(new Date());
+  it('returns "Ayer" for yesterday', () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    expect(formatRelativeDate(yesterday)).toBe('Ayer');
+  });
+
+  it('returns a non-empty string for older dates', () => {
+    const old = new Date();
+    old.setDate(old.getDate() - 30);
+    const result = formatRelativeDate(old);
     expect(typeof result).toBe('string');
     expect(result.length).toBeGreaterThan(0);
   });

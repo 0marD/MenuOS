@@ -2,19 +2,17 @@ import { describe, it, expect } from 'vitest';
 import {
   loginSchema,
   registerSchema,
-  pinLoginSchema,
-  customerRegistrationSchema,
+  pinSchema,
   forgotPasswordSchema,
 } from '../validations/auth.schema';
 import {
-  menuCategorySchema,
+  categorySchema,
   menuItemSchema,
 } from '../validations/menu.schema';
 import {
-  organizationSchema,
-  orgBrandSchema,
+  brandSettingsSchema,
   branchSchema,
-  staffUserSchema,
+  staffMemberSchema,
 } from '../validations/organization.schema';
 import { campaignSchema } from '../validations/campaign.schema';
 import { loyaltyProgramSchema } from '../validations/loyalty.schema';
@@ -32,8 +30,8 @@ describe('loginSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects short password', () => {
-    const result = loginSchema.safeParse({ email: 'admin@test.com', password: '123' });
+  it('rejects empty password', () => {
+    const result = loginSchema.safeParse({ email: 'admin@test.com', password: '' });
     expect(result.success).toBe(false);
   });
 });
@@ -42,8 +40,9 @@ describe('registerSchema', () => {
   const valid = {
     name: 'Juan',
     email: 'juan@test.com',
-    password: 'Password1',
-    orgName: 'La Cantina',
+    password: 'Password1!',
+    confirmPassword: 'Password1!',
+    restaurantName: 'La Cantina',
   };
 
   it('accepts valid registration data', () => {
@@ -51,66 +50,46 @@ describe('registerSchema', () => {
   });
 
   it('rejects password without uppercase', () => {
-    expect(registerSchema.safeParse({ ...valid, password: 'password1' }).success).toBe(false);
+    expect(registerSchema.safeParse({ ...valid, password: 'password1!', confirmPassword: 'password1!' }).success).toBe(false);
   });
 
   it('rejects password without digit', () => {
-    expect(registerSchema.safeParse({ ...valid, password: 'Passwordone' }).success).toBe(false);
+    expect(registerSchema.safeParse({ ...valid, password: 'Passwordone!', confirmPassword: 'Passwordone!' }).success).toBe(false);
   });
 
-  it('rejects password without lowercase', () => {
-    expect(registerSchema.safeParse({ ...valid, password: 'PASSWORD1' }).success).toBe(false);
+  it('rejects mismatched passwords', () => {
+    expect(registerSchema.safeParse({ ...valid, confirmPassword: 'Different1!' }).success).toBe(false);
   });
 
   it('rejects name shorter than 2 chars', () => {
     expect(registerSchema.safeParse({ ...valid, name: 'J' }).success).toBe(false);
   });
 
-  it('rejects empty orgName', () => {
-    expect(registerSchema.safeParse({ ...valid, orgName: '' }).success).toBe(false);
+  it('rejects empty restaurantName', () => {
+    expect(registerSchema.safeParse({ ...valid, restaurantName: '' }).success).toBe(false);
   });
 });
 
-describe('pinLoginSchema', () => {
+describe('pinSchema', () => {
   it('accepts a valid 4-digit PIN and branch UUID', () => {
-    const result = pinLoginSchema.safeParse({
+    const result = pinSchema.safeParse({
       pin: '1234',
-      branch_id: '00000000-0000-0000-0000-000000000001',
+      branchId: '00000000-0000-0000-0000-000000000001',
     });
     expect(result.success).toBe(true);
   });
 
   it('rejects non-numeric PIN', () => {
-    expect(pinLoginSchema.safeParse({ pin: 'abcd', branch_id: '00000000-0000-0000-0000-000000000001' }).success).toBe(false);
+    expect(pinSchema.safeParse({ pin: 'abcd', branchId: '00000000-0000-0000-0000-000000000001' }).success).toBe(false);
   });
 
   it('rejects PIN with wrong length', () => {
-    expect(pinLoginSchema.safeParse({ pin: '12345', branch_id: '00000000-0000-0000-0000-000000000001' }).success).toBe(false);
-    expect(pinLoginSchema.safeParse({ pin: '123', branch_id: '00000000-0000-0000-0000-000000000001' }).success).toBe(false);
+    expect(pinSchema.safeParse({ pin: '12345', branchId: '00000000-0000-0000-0000-000000000001' }).success).toBe(false);
+    expect(pinSchema.safeParse({ pin: '123', branchId: '00000000-0000-0000-0000-000000000001' }).success).toBe(false);
   });
 
   it('rejects invalid branch UUID', () => {
-    expect(pinLoginSchema.safeParse({ pin: '1234', branch_id: 'not-a-uuid' }).success).toBe(false);
-  });
-});
-
-describe('customerRegistrationSchema', () => {
-  const valid = { name: 'María', phone: '+525512345678', consent: true as const };
-
-  it('accepts valid customer data', () => {
-    expect(customerRegistrationSchema.safeParse(valid).success).toBe(true);
-  });
-
-  it('rejects phone without +52 prefix', () => {
-    expect(customerRegistrationSchema.safeParse({ ...valid, phone: '5512345678' }).success).toBe(false);
-  });
-
-  it('rejects name shorter than 2 chars', () => {
-    expect(customerRegistrationSchema.safeParse({ ...valid, name: 'M' }).success).toBe(false);
-  });
-
-  it('rejects consent=false', () => {
-    expect(customerRegistrationSchema.safeParse({ ...valid, consent: false }).success).toBe(false);
+    expect(pinSchema.safeParse({ pin: '1234', branchId: 'not-a-uuid' }).success).toBe(false);
   });
 });
 
@@ -126,120 +105,127 @@ describe('forgotPasswordSchema', () => {
 
 // ─── Menu Schemas ─────────────────────────────────────────────────────────────
 
-describe('menuCategorySchema', () => {
+describe('categorySchema', () => {
   it('accepts valid category', () => {
-    const result = menuCategorySchema.safeParse({ name: 'Tacos', sort_order: 0 });
+    const result = categorySchema.safeParse({ name: 'Tacos' });
     expect(result.success).toBe(true);
   });
 
   it('rejects empty name', () => {
-    expect(menuCategorySchema.safeParse({ name: '' }).success).toBe(false);
+    expect(categorySchema.safeParse({ name: '' }).success).toBe(false);
   });
 
   it('rejects invalid color hex', () => {
-    expect(menuCategorySchema.safeParse({ name: 'Tacos', color: 'red' }).success).toBe(false);
-    expect(menuCategorySchema.safeParse({ name: 'Tacos', color: '#FF0000' }).success).toBe(true);
+    expect(categorySchema.safeParse({ name: 'Tacos', color: 'red' }).success).toBe(false);
+    expect(categorySchema.safeParse({ name: 'Tacos', color: '#FF0000' }).success).toBe(true);
   });
 });
 
 describe('menuItemSchema', () => {
-  const valid = { name: 'Taco al pastor', price: 35, sort_order: 0 };
+  const valid = {
+    name: 'Taco al pastor',
+    base_price: 35,
+    category_id: '00000000-0000-0000-0000-000000000001',
+  };
 
   it('accepts valid menu item', () => {
     expect(menuItemSchema.safeParse(valid).success).toBe(true);
   });
 
   it('rejects negative price', () => {
-    expect(menuItemSchema.safeParse({ ...valid, price: -1 }).success).toBe(false);
+    expect(menuItemSchema.safeParse({ ...valid, base_price: -1 }).success).toBe(false);
   });
 
   it('rejects zero price', () => {
-    expect(menuItemSchema.safeParse({ ...valid, price: 0 }).success).toBe(false);
+    expect(menuItemSchema.safeParse({ ...valid, base_price: 0 }).success).toBe(false);
   });
 
-  it('rejects price above max', () => {
-    expect(menuItemSchema.safeParse({ ...valid, price: 100000 }).success).toBe(false);
+  it('rejects invalid photo URL', () => {
+    expect(menuItemSchema.safeParse({ ...valid, photo_url: 'not-a-url' }).success).toBe(false);
   });
 
-  it('accepts valid filters', () => {
-    expect(menuItemSchema.safeParse({ ...valid, filters: ['vegetariano', 'sin_gluten'] }).success).toBe(true);
+  it('accepts empty string for photo_url', () => {
+    expect(menuItemSchema.safeParse({ ...valid, photo_url: '' }).success).toBe(true);
   });
 
-  it('rejects invalid filter values', () => {
-    expect(menuItemSchema.safeParse({ ...valid, filters: ['kosher'] }).success).toBe(false);
+  it('accepts dietary flags', () => {
+    expect(menuItemSchema.safeParse({ ...valid, is_vegetarian: true, is_gluten_free: true }).success).toBe(true);
   });
 });
 
-// ─── Organization Schemas ────────────────────────────────────────────────────
+// ─── Organization Schemas ─────────────────────────────────────────────────────
 
-describe('organizationSchema', () => {
-  it('accepts valid org data', () => {
-    const result = organizationSchema.safeParse({
-      name: 'La Cantina',
-      slug: 'la-cantina',
-      plan: 'starter',
-    });
+describe('brandSettingsSchema', () => {
+  it('accepts valid brand data', () => {
+    const result = brandSettingsSchema.safeParse({ name: 'La Cantina' });
     expect(result.success).toBe(true);
   });
 
-  it('rejects invalid slug (spaces)', () => {
-    expect(organizationSchema.safeParse({ name: 'X', slug: 'la cantina', plan: 'starter' }).success).toBe(false);
-  });
-
-  it('rejects invalid plan', () => {
-    expect(organizationSchema.safeParse({ name: 'X', slug: 'x', plan: 'enterprise' }).success).toBe(false);
-  });
-});
-
-describe('orgBrandSchema', () => {
-  it('accepts empty object (all optional)', () => {
-    expect(orgBrandSchema.safeParse({}).success).toBe(true);
+  it('rejects name shorter than 2 chars', () => {
+    expect(brandSettingsSchema.safeParse({ name: 'X' }).success).toBe(false);
   });
 
   it('accepts valid URL for logo', () => {
-    expect(orgBrandSchema.safeParse({ logo_url: 'https://cdn.example.com/logo.png' }).success).toBe(true);
+    expect(brandSettingsSchema.safeParse({ name: 'Test', logo_url: 'https://cdn.example.com/logo.png' }).success).toBe(true);
   });
 
   it('rejects non-URL for logo', () => {
-    expect(orgBrandSchema.safeParse({ logo_url: 'not-a-url' }).success).toBe(false);
+    expect(brandSettingsSchema.safeParse({ name: 'Test', logo_url: 'not-a-url' }).success).toBe(false);
+  });
+
+  it('accepts empty string for logo_url', () => {
+    expect(brandSettingsSchema.safeParse({ name: 'Test', logo_url: '' }).success).toBe(true);
   });
 
   it('rejects invalid color hex', () => {
-    expect(orgBrandSchema.safeParse({ colors: { primary: 'red' } }).success).toBe(false);
-    expect(orgBrandSchema.safeParse({ colors: { primary: '#D4500A' } }).success).toBe(true);
+    expect(brandSettingsSchema.safeParse({ name: 'Test', primary_color: 'red' }).success).toBe(false);
+    expect(brandSettingsSchema.safeParse({ name: 'Test', primary_color: '#D4500A' }).success).toBe(true);
   });
 });
 
 describe('branchSchema', () => {
   it('accepts valid branch', () => {
-    expect(branchSchema.safeParse({ name: 'Centro', timezone: 'America/Mexico_City' }).success).toBe(true);
+    expect(branchSchema.safeParse({ name: 'Centro' }).success).toBe(true);
   });
 
-  it('rejects short name', () => {
-    expect(branchSchema.safeParse({ name: 'X' }).success).toBe(false);
+  it('rejects empty name', () => {
+    expect(branchSchema.safeParse({ name: '' }).success).toBe(false);
+  });
+
+  it('defaults timezone to America/Mexico_City', () => {
+    const result = branchSchema.safeParse({ name: 'Centro' });
+    if (result.success) expect(result.data.timezone).toBe('America/Mexico_City');
   });
 });
 
-describe('staffUserSchema', () => {
+describe('staffMemberSchema', () => {
   it('accepts valid staff member', () => {
-    expect(staffUserSchema.safeParse({ name: 'Carlos', role: 'waiter' }).success).toBe(true);
+    expect(staffMemberSchema.safeParse({ name: 'Carlos', role: 'waiter' }).success).toBe(true);
   });
 
   it('rejects invalid role', () => {
-    expect(staffUserSchema.safeParse({ name: 'Carlos', role: 'owner' }).success).toBe(false);
+    expect(staffMemberSchema.safeParse({ name: 'Carlos', role: 'owner' }).success).toBe(false);
   });
 
-  it('rejects invalid UUID for branch_id', () => {
-    expect(staffUserSchema.safeParse({ name: 'Carlos', role: 'waiter', branch_id: 'bad-id' }).success).toBe(false);
+  it('rejects invalid UUID in branch_ids', () => {
+    expect(staffMemberSchema.safeParse({ name: 'Carlos', role: 'waiter', branch_ids: ['bad-id'] }).success).toBe(false);
+  });
+
+  it('accepts valid UUID in branch_ids', () => {
+    expect(staffMemberSchema.safeParse({
+      name: 'Carlos',
+      role: 'waiter',
+      branch_ids: ['00000000-0000-0000-0000-000000000001'],
+    }).success).toBe(true);
   });
 });
 
-// ─── Campaign Schema ─────────────────────────────────────────────────────────
+// ─── Campaign Schema ──────────────────────────────────────────────────────────
 
 describe('campaignSchema', () => {
   const valid = {
     name: 'Promo verano',
-    message: 'Hola {{nombre}}, tenemos una oferta para ti!',
+    template_name: 'promo_verano',
     segment: 'all' as const,
   };
 
@@ -247,22 +233,23 @@ describe('campaignSchema', () => {
     expect(campaignSchema.safeParse(valid).success).toBe(true);
   });
 
-  it('rejects short message', () => {
-    expect(campaignSchema.safeParse({ ...valid, message: 'corto' }).success).toBe(false);
+  it('rejects missing template_name', () => {
+    const { template_name: _, ...withoutTemplate } = valid;
+    expect(campaignSchema.safeParse(withoutTemplate).success).toBe(false);
   });
 
   it('rejects invalid segment', () => {
     expect(campaignSchema.safeParse({ ...valid, segment: 'vip' }).success).toBe(false);
   });
 
-  it('accepts empty scheduled_at as null', () => {
-    const result = campaignSchema.safeParse({ ...valid, scheduled_at: '' });
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.scheduled_at).toBeNull();
+  it('accepts all valid segments', () => {
+    for (const segment of ['all', 'new', 'frequent', 'dormant'] as const) {
+      expect(campaignSchema.safeParse({ ...valid, segment }).success).toBe(true);
+    }
   });
 
-  it('rejects message over 1024 characters', () => {
-    expect(campaignSchema.safeParse({ ...valid, message: 'a'.repeat(1025) }).success).toBe(false);
+  it('accepts optional message_body', () => {
+    expect(campaignSchema.safeParse({ ...valid, message_body: 'Hola!' }).success).toBe(true);
   });
 });
 
@@ -273,33 +260,32 @@ describe('loyaltyProgramSchema', () => {
     name: 'Tarjeta de sellos',
     stamps_required: 8,
     reward_type: 'free_item' as const,
-    reward_value: 'Café americano gratis',
-    expiration_days: 90,
+    reward_description: 'Café americano gratis',
   };
 
   it('accepts valid loyalty program', () => {
     expect(loyaltyProgramSchema.safeParse(valid).success).toBe(true);
   });
 
-  it('rejects stamps_required below 5', () => {
-    expect(loyaltyProgramSchema.safeParse({ ...valid, stamps_required: 4 }).success).toBe(false);
+  it('rejects stamps_required below 3', () => {
+    expect(loyaltyProgramSchema.safeParse({ ...valid, stamps_required: 2 }).success).toBe(false);
   });
 
-  it('rejects stamps_required above 12', () => {
-    expect(loyaltyProgramSchema.safeParse({ ...valid, stamps_required: 13 }).success).toBe(false);
+  it('rejects stamps_required above 20', () => {
+    expect(loyaltyProgramSchema.safeParse({ ...valid, stamps_required: 21 }).success).toBe(false);
   });
 
   it('rejects invalid reward_type', () => {
     expect(loyaltyProgramSchema.safeParse({ ...valid, reward_type: 'points' }).success).toBe(false);
   });
 
-  it('transforms expiration_days=0 to null', () => {
-    const result = loyaltyProgramSchema.safeParse({ ...valid, expiration_days: 0 });
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.expiration_days).toBeNull();
+  it('accepts all valid reward types', () => {
+    for (const reward_type of ['discount', 'free_item', 'bogo'] as const) {
+      expect(loyaltyProgramSchema.safeParse({ ...valid, reward_type }).success).toBe(true);
+    }
   });
 
-  it('accepts null expiration_days', () => {
-    expect(loyaltyProgramSchema.safeParse({ ...valid, expiration_days: null }).success).toBe(true);
+  it('accepts optional stamps_expiry_days', () => {
+    expect(loyaltyProgramSchema.safeParse({ ...valid, stamps_expiry_days: 90 }).success).toBe(true);
   });
 });

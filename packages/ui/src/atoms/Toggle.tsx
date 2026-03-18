@@ -1,42 +1,32 @@
 'use client';
 
-import * as React from 'react';
 import * as TogglePrimitive from '@radix-ui/react-toggle';
-import { cva, type VariantProps } from 'class-variance-authority';
+import * as React from 'react';
 import { cn } from '../lib/utils';
 
-const toggleVariants = cva(
-  'inline-flex items-center justify-center rounded-md text-sm font-medium font-sans ring-offset-background transition-colors hover:bg-cream hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=on]:bg-accent data-[state=on]:text-accent-foreground',
-  {
-    variants: {
-      variant: {
-        default: 'bg-transparent',
-        outline: 'border border-input bg-transparent hover:bg-cream',
-      },
-      size: {
-        default: 'h-10 px-3',
-        sm: 'h-8 px-2.5',
-        lg: 'h-11 px-5',
-      },
-    },
-    defaultVariants: {
-      variant: 'default',
-      size: 'default',
-    },
-  }
-);
+export interface ToggleProps extends React.ComponentPropsWithoutRef<typeof TogglePrimitive.Root> {
+  label?: string;
+}
 
-const Toggle = React.forwardRef<
+export const Toggle = React.forwardRef<
   React.ElementRef<typeof TogglePrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof TogglePrimitive.Root> &
-    VariantProps<typeof toggleVariants>
->(({ className, variant, size, ...props }, ref) => (
+  ToggleProps
+>(({ className, label, children, ...props }, ref) => (
   <TogglePrimitive.Root
     ref={ref}
-    className={cn(toggleVariants({ variant, size, className }))}
+    className={cn(
+      'inline-flex items-center justify-center rounded border border-rule bg-paper px-3 py-2 text-sm font-medium text-muted transition-colors',
+      'hover:bg-cream hover:text-ink',
+      'data-[state=on]:bg-accent data-[state=on]:text-white data-[state=on]:border-accent',
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+      'disabled:pointer-events-none disabled:opacity-50',
+      className,
+    )}
+    aria-label={label}
     {...props}
-  />
+  >
+    {children}
+  </TogglePrimitive.Root>
 ));
-Toggle.displayName = TogglePrimitive.Root.displayName;
 
-export { Toggle, toggleVariants };
+Toggle.displayName = 'Toggle';

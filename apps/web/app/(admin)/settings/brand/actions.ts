@@ -1,41 +1,27 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { requireAdminSession } from '@/lib/auth/get-session';
 import { createClient } from '@/lib/supabase/server';
-import { orgBrandSchema, type OrgBrandInput } from '@menuos/shared/validations';
+import type { BrandSettingsInput } from '@menuos/shared';
 
-export async function updateBrandSettings(
-  orgId: string,
-  data: OrgBrandInput & { template_slug?: string }
-): Promise<{ success: boolean; error?: string }> {
-  const parsed = orgBrandSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: 'Datos inválidos' };
-
+export async function updateBrandSettings(data: BrandSettingsInput) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
 
-  const updates: Record<string, unknown> = {};
-  if (parsed.data.logo_url !== undefined) updates['logo_url'] = parsed.data.logo_url;
-  if (parsed.data.banner_url !== undefined) updates['banner_url'] = parsed.data.banner_url;
-  if (parsed.data.colors !== undefined) updates['colors'] = parsed.data.colors;
+  const { error } = await supabase
+    .from('organizations')
+    .update({
+      name: data.name,
+      logo_url: data.logo_url || null,
+      banner_url: data.banner_url || null,
+      primary_color: data.primary_color || null,
+      secondary_color: data.secondary_color || null,
+    })
+    .eq('id', org.id);
 
-  if (Object.keys(updates).length > 0) {
-    const { error } = await supabase
-      .from('organizations')
-      .update(updates)
-      .eq('id', orgId);
-    if (error) return { success: false, error: error.message };
-  }
+  if (error) return { error: 'Error al guardar la configuración de marca.' };
 
-  if (data.template_slug) {
-    await supabase
-      .from('org_settings')
-      .upsert({
-        organization_id: orgId,
-        key: 'design_template',
-        value: data.template_slug,
-      }, { onConflict: 'organization_id,key' });
-  }
-
-  revalidatePath('/admin/settings/brand');
-  return { success: true };
+  revalidatePath('/settings/brand');
+  revalidatePath(`/${org.slug}`);
 }

@@ -1,40 +1,43 @@
 'use client';
 
+import { RefreshCw, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
-import { cn } from '@menuos/ui';
 
 interface MenuUpdateToastProps {
-  visible: boolean;
-  onRefresh: () => void;
+  show: boolean;
+  onDismiss: () => void;
 }
 
-export function MenuUpdateToast({ visible, onRefresh }: MenuUpdateToastProps) {
-  const [show, setShow] = useState(false);
+export function MenuUpdateToast({ show, onDismiss }: MenuUpdateToastProps) {
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (visible) {
-      setShow(true);
+    if (show) {
+      setVisible(true);
+      const timer = setTimeout(() => {
+        setVisible(false);
+        onDismiss();
+      }, 4000);
+      return () => clearTimeout(timer);
     }
-  }, [visible]);
+  }, [show, onDismiss]);
 
-  if (!show) return null;
+  if (!visible) return null;
 
   return (
     <div
       role="status"
       aria-live="polite"
-      className={cn(
-        'fixed bottom-24 left-1/2 z-50 -translate-x-1/2 transition-all duration-300',
-        show ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
-      )}
+      className="fixed bottom-24 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-rule bg-paper px-4 py-2 shadow-lg"
     >
+      <RefreshCw className="h-3.5 w-3.5 animate-spin text-accent" />
+      <span className="text-xs font-medium text-ink">Menú actualizado</span>
       <button
-        onClick={onRefresh}
-        className="flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-sans font-medium text-paper shadow-lg"
+        onClick={() => { setVisible(false); onDismiss(); }}
+        aria-label="Cerrar notificación"
+        className="ml-1 text-muted hover:text-ink"
       >
-        <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-        Menú actualizado · Recargar
+        <X className="h-3 w-3" />
       </button>
     </div>
   );

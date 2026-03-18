@@ -1,94 +1,79 @@
-const CACHE_NAME = 'menuos-v1';
-
-// Assets to cache on install (app shell)
-const PRECACHE_URLS = [
-  '/',
-  '/offline',
-];
+const CACHE_NAME = 'menuos-v2';
+const OFFLINE_URL = '/offline';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll([OFFLINE_URL])),
   );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
-      )
-    )
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))),
+      ),
   );
   self.clients.claim();
 });
 
+// ── Push notifications ────────────────────────────────────────────────────────
+
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  let payload = { title: 'MenuOS', body: '', data: {} };
+  try {
+    payload = event.data.json();
+  } catch {
+    payload.body = event.data.text();
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-72.png',
+      data: payload.data ?? {},
+      vibrate: [200, 100, 200],
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url ?? '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      const match = clients.find((c) => c.url.includes(self.location.origin));
+      if (match) return match.focus();
+      return self.clients.openWindow(url);
+    }),
+  );
+});
+
+// ── Fetch cache ───────────────────────────────────────────────────────────────
+
 self.addEventListener('fetch', (event) => {
-  const { request } = event;
-  const url = new URL(request.url);
+  if (event.request.method !== 'GET') return;
+  if (!event.request.url.startsWith(self.location.origin)) return;
 
-  // Only handle same-origin GETs
-  if (request.method !== 'GET' || url.origin !== self.location.origin) return;
-
-  // Skip admin, auth, and API routes — always network
-  if (
-    url.pathname.startsWith('/admin') ||
-    url.pathname.startsWith('/auth') ||
-    url.pathname.startsWith('/api') ||
-    url.pathname.startsWith('/_next/static/chunks')
-  ) {
-    return;
-  }
-
-  // Images: cache-first with 7-day TTL
-  if (request.destination === 'image') {
-    event.respondWith(
-      caches.open(CACHE_NAME).then(async (cache) => {
-        const cached = await cache.match(request);
-        if (cached) return cached;
-        try {
-          const response = await fetch(request);
-          if (response.ok) cache.put(request, response.clone());
-          return response;
-        } catch {
-          return new Response('', { status: 408 });
+  // Network-first with offline fallback
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
-      })
-    );
-    return;
-  }
-
-  // Next.js static assets: cache-first
-  if (url.pathname.startsWith('/_next/static')) {
-    event.respondWith(
-      caches.open(CACHE_NAME).then(async (cache) => {
-        const cached = await cache.match(request);
-        if (cached) return cached;
-        const response = await fetch(request);
-        cache.put(request, response.clone());
         return response;
       })
-    );
-    return;
-  }
-
-  // Public menu pages ([slug]): stale-while-revalidate
-  if (url.pathname.match(/^\/[a-z0-9-]+$/)) {
-    event.respondWith(
-      caches.open(CACHE_NAME).then(async (cache) => {
-        const cached = await cache.match(request);
-        const fetchPromise = fetch(request)
-          .then((response) => {
-            if (response.ok) cache.put(request, response.clone());
-            return response;
-          })
-          .catch(() => cached ?? caches.match('/offline'));
-        return cached ?? fetchPromise;
-      })
-    );
-    return;
-  }
+      .catch(() =>
+        caches
+          .match(event.request)
+          .then((cached) => cached ?? caches.match(OFFLINE_URL)),
+      ),
+  );
 });

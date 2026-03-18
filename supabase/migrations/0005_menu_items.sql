@@ -1,90 +1,42 @@
--- Migration: menu_items, menu_item_photos, menu_item_filters, menu_item_branch_overrides
--- Phase 0.14, 0.15
-
-create table public.menu_items (
-  id               uuid primary key default gen_random_uuid(),
-  organization_id  uuid not null references public.organizations(id) on delete cascade,
-  category_id      uuid not null references public.menu_categories(id) on delete cascade,
-  name             text not null,
-  description      text,
-  price            numeric(10,2) not null check (price >= 0),
-  is_available     boolean not null default true,
-  is_sold_out_today boolean not null default false,
-  sort_order       integer not null default 0,
-  prep_time        integer check (prep_time >= 0 and prep_time <= 120),
-  is_special       boolean not null default false,
-  deleted_at       timestamptz,
-  created_at       timestamptz not null default now(),
-  updated_at       timestamptz not null default now()
+CREATE TABLE menu_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  category_id UUID NOT NULL REFERENCES menu_categories(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  base_price NUMERIC(10, 2) NOT NULL CHECK (base_price >= 0),
+  photo_url TEXT,
+  is_available BOOLEAN NOT NULL DEFAULT true,
+  is_sold_out_today BOOLEAN NOT NULL DEFAULT false,
+  is_special BOOLEAN NOT NULL DEFAULT false,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  preparation_time_minutes INTEGER CHECK (preparation_time_minutes > 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ
 );
 
-create index menu_items_category_idx on public.menu_items (category_id, sort_order) where deleted_at is null;
-create index menu_items_org_idx on public.menu_items (organization_id) where deleted_at is null;
-
-create table public.menu_item_photos (
-  id            uuid primary key default gen_random_uuid(),
-  menu_item_id  uuid not null references public.menu_items(id) on delete cascade,
-  url           text not null,
-  position      integer not null default 0,
-  created_at    timestamptz not null default now()
+CREATE TABLE menu_item_branch_overrides (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  menu_item_id UUID NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
+  branch_id UUID NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
+  price_override NUMERIC(10, 2),
+  is_available_override BOOLEAN,
+  UNIQUE (menu_item_id, branch_id)
 );
 
-create index menu_item_photos_item_idx on public.menu_item_photos (menu_item_id);
+CREATE TRIGGER menu_items_updated_at
+  BEFORE UPDATE ON menu_items
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-create table public.menu_item_filters (
-  id            uuid primary key default gen_random_uuid(),
-  menu_item_id  uuid not null references public.menu_items(id) on delete cascade,
-  filter        text not null check (filter in ('vegetariano','sin_gluten','picante','vegano'))
-);
+CREATE INDEX idx_menu_items_org_available
+  ON menu_items(organization_id, is_available)
+  WHERE deleted_at IS NULL;
 
-create unique index menu_item_filters_unique on public.menu_item_filters (menu_item_id, filter);
+CREATE INDEX idx_menu_items_category
+  ON menu_items(category_id, sort_order)
+  WHERE deleted_at IS NULL;
 
-create table public.menu_item_branch_overrides (
-  id             uuid primary key default gen_random_uuid(),
-  menu_item_id   uuid not null references public.menu_items(id) on delete cascade,
-  branch_id      uuid not null references public.branches(id) on delete cascade,
-  price_override numeric(10,2),
-  is_available   boolean,
-  created_at     timestamptz not null default now(),
-  updated_at     timestamptz not null default now()
-);
-
-create unique index menu_item_branch_overrides_unique on public.menu_item_branch_overrides (menu_item_id, branch_id);
-
-alter table public.menu_items enable row level security;
-alter table public.menu_item_photos enable row level security;
-alter table public.menu_item_filters enable row level security;
-alter table public.menu_item_branch_overrides enable row level security;
-
-create trigger menu_items_updated_at
-  before update on public.menu_items
-  for each row execute function public.set_updated_at();
-
--- Trigger: price change history
-create table public.price_change_history (
-  id            uuid primary key default gen_random_uuid(),
-  menu_item_id  uuid not null references public.menu_items(id) on delete cascade,
-  old_price     numeric(10,2) not null,
-  new_price     numeric(10,2) not null,
-  changed_by    uuid references auth.users(id) on delete set null,
-  created_at    timestamptz not null default now()
-);
-
-create index price_change_history_item_idx on public.price_change_history (menu_item_id, created_at desc);
-
-alter table public.price_change_history enable row level security;
-
-create or replace function public.record_price_change()
-returns trigger language plpgsql as $$
-begin
-  if old.price <> new.price then
-    insert into public.price_change_history (menu_item_id, old_price, new_price, changed_by)
-    values (new.id, old.price, new.price, auth.uid());
-  end if;
-  return new;
-end;
-$$;
-
-create trigger menu_items_price_change
-  after update on public.menu_items
-  for each row execute function public.record_price_change();
+CREATE INDEX idx_menu_items_name_search
+  ON menu_items USING gin(to_tsvector('spanish', name))
+  WHERE deleted_at IS NULL;

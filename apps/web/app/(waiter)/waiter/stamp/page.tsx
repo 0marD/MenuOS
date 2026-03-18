@@ -1,52 +1,46 @@
-import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
+import Link from 'next/link';
+import { ChevronLeft } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
 import { StampGrantForm } from './StampGrantForm';
 
-export const metadata: Metadata = { title: 'Otorgar sello — Mesero' };
-
 export default async function StampPage() {
+  const jar = await cookies();
+  const branchId = jar.get('menuos_branch_id')!.value;
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/auth/pin');
-
-  const { data: staffUser } = await supabase
-    .from('staff_users')
-    .select('id, organization_id, branch_id')
-    .eq('auth_user_id', user.id)
+  const { data: branch } = await supabase
+    .from('branches')
+    .select('organization_id')
+    .eq('id', branchId)
     .single();
-  if (!staffUser) redirect('/auth/pin');
 
-  const { data: program } = await supabase
+  if (!branch) return null;
+
+  const { data: programs } = await supabase
     .from('loyalty_programs')
-    .select('id, name, stamps_required, reward_type, reward_value')
-    .eq('organization_id', staffUser.organization_id)
-    .eq('is_active', true)
-    .is('deleted_at', null)
-    .order('created_at')
-    .limit(1)
-    .single();
+    .select('*')
+    .eq('organization_id', branch.organization_id)
+    .eq('is_active', true);
 
   return (
-    <div className="p-4">
-      <div className="mb-6">
-        <h1 className="font-display text-xl font-bold text-paper">Otorgar sello</h1>
-        <p className="text-sm text-white/50">Busca al cliente por teléfono y otorga su sello</p>
-      </div>
-
-      {!program ? (
-        <div className="rounded-xl border border-white/10 bg-white/5 p-8 text-center">
-          <p className="text-white/50">No hay programa de fidelidad activo</p>
-        </div>
-      ) : (
-        <StampGrantForm
-          program={program}
-          staffId={staffUser.id}
-          branchId={staffUser.branch_id}
-          orgId={staffUser.organization_id}
-        />
-      )}
+    <div className="min-h-screen bg-paper">
+      <header className="sticky top-0 z-10 border-b border-rule bg-paper px-4 py-3">
+        <Link href="/waiter" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink">
+          <ChevronLeft className="h-4 w-4" />
+          Volver
+        </Link>
+        <h1 className="mt-1 font-display text-lg font-bold text-ink">Sellos de fidelización</h1>
+      </header>
+      <main className="p-4">
+        {(!programs || programs.length === 0) ? (
+          <p className="py-12 text-center text-sm text-muted">
+            No hay programas de fidelización activos.
+          </p>
+        ) : (
+          <StampGrantForm programs={programs} orgId={branch.organization_id} />
+        )}
+      </main>
     </div>
   );
 }

@@ -1,223 +1,243 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
-import { X, MessageCircle } from 'lucide-react';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Button } from '@menuos/ui/atoms/Button';
-import { customerRegistrationSchema, type CustomerRegistrationInput } from '@menuos/shared/validations';
-import { registerCustomer } from '../actions';
+import { X } from 'lucide-react';
+import { useState, useTransition } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { Button, FormField, Input } from '@menuos/ui';
+import { sendOtp, verifyOtpAndRegister } from '../actions';
 
-const DISMISS_KEY = 'menuos_reg_dismissed';
-const DISMISS_DURATION_MS = 24 * 60 * 60 * 1000; // 24h
-const SHOW_DELAY_MS = 10_000;
+const step1Schema = z.object({
+  name: z.string().min(2, 'Mínimo 2 caracteres').max(100),
+  phone: z
+    .string()
+    .regex(/^(\+?52)?[1-9]\d{9}$/, 'Número de WhatsApp inválido')
+    .transform((v) => v.replace(/\D/g, '').replace(/^52/, '')),
+  optIn: z.boolean().default(true),
+});
+
+const step2Schema = z.object({
+  code: z.string().length(6, 'El código tiene 6 dígitos').regex(/^\d+$/, 'Solo números'),
+});
+
+type Step1Input = z.infer<typeof step1Schema>;
+type Step2Input = z.infer<typeof step2Schema>;
 
 interface CustomerRegistrationSheetProps {
   orgId: string;
   orgName: string;
+  onSuccess: (customerId: string) => void;
+  onClose: () => void;
 }
 
-function isDismissed(): boolean {
-  try {
-    const raw = localStorage.getItem(DISMISS_KEY);
-    if (!raw) return false;
-    return Date.now() - Number(raw) < DISMISS_DURATION_MS;
-  } catch {
-    return false;
-  }
-}
-
-function setDismissed() {
-  try {
-    localStorage.setItem(DISMISS_KEY, String(Date.now()));
-  } catch {
-    // localStorage unavailable
-  }
-}
-
-export function CustomerRegistrationSheet({ orgId, orgName }: CustomerRegistrationSheetProps) {
-  const [visible, setVisible] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [serverError, setServerError] = useState<string | null>(null);
+export function CustomerRegistrationSheet({
+  orgId,
+  orgName,
+  onSuccess,
+  onClose,
+}: CustomerRegistrationSheetProps) {
+  const [step, setStep] = useState<1 | 2>(1);
+  const [registrationData, setRegistrationData] = useState<Step1Input | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<CustomerRegistrationInput>({
-    resolver: zodResolver(customerRegistrationSchema),
-    defaultValues: { phone: '+52' },
+  const step1Form = useForm<Step1Input>({
+    resolver: zodResolver(step1Schema),
+    defaultValues: { optIn: true },
   });
 
-  useEffect(() => {
-    if (isDismissed()) return;
+  const step2Form = useForm<Step2Input>({
+    resolver: zodResolver(step2Schema),
+  });
 
-    const timer = setTimeout(() => setVisible(true), SHOW_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, []);
-
-  function dismiss() {
-    setDismissed();
-    setVisible(false);
+  function onStep1Submit(data: Step1Input) {
+    startTransition(async () => {
+      const result = await sendOtp(orgId, data.phone);
+      if (result.error) {
+        step1Form.setError('root', { message: result.error });
+        return;
+      }
+      setRegistrationData(data);
+      setStep(2);
+    });
   }
 
-  function onSubmit(data: CustomerRegistrationInput) {
-    setServerError(null);
+  function onStep2Submit(data: Step2Input) {
+    if (!registrationData) return;
     startTransition(async () => {
-      const result = await registerCustomer(orgId, data);
-      if (result.success) {
-        setSuccess(true);
-        setTimeout(() => setVisible(false), 2500);
-      } else {
-        setServerError(result.error ?? 'Ocurrió un error, intenta de nuevo');
+      const result = await verifyOtpAndRegister(
+        orgId,
+        registrationData.name,
+        registrationData.phone,
+        data.code,
+        registrationData.optIn,
+      );
+      if (result.error) {
+        step2Form.setError('root', { message: result.error });
+        return;
+      }
+      if (result.customerId) {
+        onSuccess(result.customerId);
       }
     });
   }
 
-  if (!visible) return null;
+  function handleResend() {
+    if (!registrationData) return;
+    startTransition(async () => {
+      step2Form.clearErrors();
+      await sendOtp(orgId, registrationData.phone);
+    });
+  }
 
   return (
     <>
       {/* Backdrop */}
       <div
         className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm"
-        aria-hidden="true"
-        onClick={dismiss}
+        onClick={onClose}
+        aria-hidden
       />
 
-      {/* Bottom sheet */}
+      {/* Sheet */}
       <div
         role="dialog"
+        aria-label="Regístrate para hacer tu pedido"
         aria-modal="true"
-        aria-labelledby="reg-sheet-title"
-        className="fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-paper px-5 pb-8 pt-5 shadow-2xl"
+        className="fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-paper px-6 pb-8 pt-6 shadow-2xl"
       >
         <button
-          onClick={dismiss}
+          onClick={onClose}
+          className="absolute right-4 top-4 rounded-full p-1 text-muted hover:bg-cream hover:text-ink"
           aria-label="Cerrar"
-          className="absolute right-4 top-4 rounded-full p-1 text-muted hover:bg-cream"
         >
-          <X className="h-5 w-5" aria-hidden="true" />
+          <X className="h-5 w-5" />
         </button>
 
-        {success ? (
-          <div className="flex flex-col items-center gap-3 py-4 text-center">
-            <span className="text-4xl" aria-hidden="true">🎉</span>
-            <p id="reg-sheet-title" className="font-display text-xl font-bold text-ink">
-              ¡Bienvenido!
+        {step === 1 ? (
+          <>
+            <h2 className="mb-1 font-display text-xl font-bold text-ink">Bienvenido</h2>
+            <p className="mb-6 text-sm text-muted">
+              Regístrate para hacer tu pedido en {orgName}.
             </p>
-            <p className="text-sm font-sans text-muted">
-              Ya estás registrado en {orgName}. Acumula visitas y gana recompensas.
-            </p>
-          </div>
+
+            <form
+              onSubmit={step1Form.handleSubmit(onStep1Submit)}
+              className="flex flex-col gap-4"
+              noValidate
+            >
+              <FormField
+                label="Tu nombre"
+                htmlFor="reg-name"
+                error={step1Form.formState.errors.name?.message}
+                required
+              >
+                <Input
+                  id="reg-name"
+                  autoFocus
+                  placeholder="Nombre y apellido"
+                  error={!!step1Form.formState.errors.name}
+                  {...step1Form.register('name')}
+                />
+              </FormField>
+
+              <FormField
+                label="WhatsApp"
+                htmlFor="reg-phone"
+                error={step1Form.formState.errors.phone?.message}
+                hint="Ej. 5512345678"
+                required
+              >
+                <Input
+                  id="reg-phone"
+                  type="tel"
+                  inputMode="numeric"
+                  placeholder="5512345678"
+                  error={!!step1Form.formState.errors.phone}
+                  {...step1Form.register('phone')}
+                />
+              </FormField>
+
+              <label className="flex items-start gap-3 text-sm text-muted">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 accent-[var(--accent,#D4500A)]"
+                  {...step1Form.register('optIn')}
+                />
+                <span>
+                  Acepto recibir promociones y novedades de {orgName} por WhatsApp. Puedes darte de
+                  baja cuando quieras.
+                </span>
+              </label>
+
+              {step1Form.formState.errors.root && (
+                <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-600">
+                  {step1Form.formState.errors.root.message}
+                </p>
+              )}
+
+              <Button type="submit" size="lg" className="mt-2 w-full" disabled={isPending}>
+                {isPending ? 'Enviando código…' : 'Continuar'}
+              </Button>
+            </form>
+          </>
         ) : (
           <>
-            <div className="mb-5 flex items-start gap-3">
-              <span className="text-3xl" aria-hidden="true">🎁</span>
-              <div>
-                <p id="reg-sheet-title" className="font-display text-lg font-bold text-ink">
-                  ¿Quieres tu sello?
-                </p>
-                <p className="text-sm font-sans text-muted">
-                  Regístrate y acumula visitas para obtener recompensas en {orgName}.
-                </p>
-              </div>
-            </div>
+            <h2 className="mb-1 font-display text-xl font-bold text-ink">Verifica tu número</h2>
+            <p className="mb-6 text-sm text-muted">
+              Ingresa el código de 6 dígitos que enviamos a tu WhatsApp{' '}
+              <span className="font-medium text-ink">{registrationData?.phone}</span>.
+            </p>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-3" noValidate>
-              {serverError && (
-                <div role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {serverError}
-                </div>
-              )}
-
-              <div>
-                <label htmlFor="reg-name" className="mb-1 block text-xs font-medium font-sans text-ink">
-                  Nombre
-                </label>
-                <input
-                  id="reg-name"
-                  type="text"
-                  autoComplete="given-name"
-                  placeholder="Tu nombre"
-                  {...register('name')}
-                  className="h-10 w-full rounded-lg border border-rule bg-cream px-3 text-sm font-sans placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
-                  aria-describedby={errors.name ? 'reg-name-error' : undefined}
+            <form
+              onSubmit={step2Form.handleSubmit(onStep2Submit)}
+              className="flex flex-col gap-4"
+              noValidate
+            >
+              <FormField
+                label="Código de verificación"
+                htmlFor="otp-code"
+                error={step2Form.formState.errors.code?.message}
+                required
+              >
+                <Input
+                  id="otp-code"
+                  autoFocus
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="123456"
+                  error={!!step2Form.formState.errors.code}
+                  className="text-center text-2xl tracking-widest"
+                  {...step2Form.register('code')}
                 />
-                {errors.name && (
-                  <p id="reg-name-error" role="alert" className="mt-1 text-xs text-destructive">
-                    {errors.name.message}
-                  </p>
-                )}
-              </div>
+              </FormField>
 
-              <div>
-                <label htmlFor="reg-phone" className="mb-1 block text-xs font-medium font-sans text-ink">
-                  WhatsApp
-                </label>
-                <div className="relative">
-                  <MessageCircle
-                    className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
-                    aria-hidden="true"
-                  />
-                  <input
-                    id="reg-phone"
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="tel"
-                    placeholder="+52 55 1234 5678"
-                    {...register('phone')}
-                    className="h-10 w-full rounded-lg border border-rule bg-cream pl-9 pr-3 text-sm font-sans placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
-                    aria-describedby={errors.phone ? 'reg-phone-error' : undefined}
-                  />
-                </div>
-                {errors.phone && (
-                  <p id="reg-phone-error" role="alert" className="mt-1 text-xs text-destructive">
-                    {errors.phone.message}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex items-start gap-2">
-                <input
-                  id="reg-consent"
-                  type="checkbox"
-                  {...register('consent')}
-                  className="mt-0.5 h-4 w-4 accent-accent"
-                  aria-describedby={errors.consent ? 'reg-consent-error' : undefined}
-                />
-                <label htmlFor="reg-consent" className="text-xs font-sans text-muted leading-relaxed">
-                  Acepto recibir mensajes de {orgName} por WhatsApp sobre promociones y mi cuenta de fidelidad.{' '}
-                  <a href="/privacidad" className="underline hover:text-ink">
-                    Aviso de privacidad
-                  </a>
-                </label>
-              </div>
-              {errors.consent && (
-                <p id="reg-consent-error" role="alert" className="text-xs text-destructive">
-                  {errors.consent.message}
+              {step2Form.formState.errors.root && (
+                <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-600">
+                  {step2Form.formState.errors.root.message}
                 </p>
               )}
 
-              <div className="flex gap-3 pt-1">
-                <Button
+              <Button type="submit" size="lg" className="w-full" disabled={isPending}>
+                {isPending ? 'Verificando…' : 'Verificar'}
+              </Button>
+
+              <div className="flex items-center justify-between">
+                <button
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={dismiss}
-                  className="flex-1"
+                  className="text-sm text-muted hover:text-ink"
+                  onClick={() => setStep(1)}
                 >
-                  Ahora no
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
+                  ← Cambiar número
+                </button>
+                <button
+                  type="button"
+                  className="text-sm text-accent hover:underline"
+                  onClick={handleResend}
                   disabled={isPending}
-                  className="flex-1"
                 >
-                  {isPending ? 'Registrando...' : 'Registrarme'}
-                </Button>
+                  Reenviar código
+                </button>
               </div>
             </form>
           </>

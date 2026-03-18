@@ -1,106 +1,81 @@
 'use client';
 
-import { useState, useRef, useTransition } from 'react';
-import { Button } from '@menuos/ui/atoms/Button';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useTransition } from 'react';
+import { useForm } from 'react-hook-form';
+import { Button, FormField, Input } from '@menuos/ui';
 import { loginWithPin } from '@/lib/auth/pin-actions';
+import { pinSchema, type PinInput } from '@menuos/shared';
+import type { Tables } from '@menuos/database';
 
 interface PinLoginFormProps {
-  branches?: Array<{ id: string; name: string }>;
+  branches: Pick<Tables<'branches'>, 'id' | 'name'>[];
 }
 
-export function PinLoginForm({ branches = [] }: PinLoginFormProps) {
-  const [pin, setPin] = useState<string[]>(['', '', '', '']);
+export function PinLoginForm({ branches }: PinLoginFormProps) {
   const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [selectedBranch, setSelectedBranch] = useState<string>(branches[0]?.id ?? '');
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  function handleDigit(index: number, value: string) {
-    if (!/^\d?$/.test(value)) return;
+  const {
+    register,
+    handleSubmit,
+    setError,
+    formState: { errors },
+  } = useForm<PinInput>({
+    resolver: zodResolver(pinSchema),
+    defaultValues: { branchId: branches[0]?.id ?? '' },
+  });
 
-    const newPin = [...pin];
-    newPin[index] = value;
-    setPin(newPin);
-
-    if (value && index < 3) {
-      inputRefs.current[index + 1]?.focus();
-    }
-
-    if (newPin.every((d) => d !== '')) {
-      submitPin(newPin.join(''));
-    }
-  }
-
-  function handleKeyDown(index: number, e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Backspace' && !pin[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
-  }
-
-  function submitPin(pinValue: string) {
-    setError(null);
+  function onSubmit(data: PinInput) {
     startTransition(async () => {
-      const result = await loginWithPin(pinValue, selectedBranch || undefined);
-      if (result && 'error' in result) {
-        setError(result.error);
-        setPin(['', '', '', '']);
-        inputRefs.current[0]?.focus();
+      const result = await loginWithPin(data);
+      if (result?.error) {
+        setError('root', { message: result.error });
       }
     });
   }
 
   return (
-    <div className="flex flex-col items-center gap-6">
-      {/* Branch selector — only if multiple branches */}
+    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
       {branches.length > 1 && (
-        <div className="w-full">
-          <label htmlFor="pin-branch" className="mb-1 block text-xs font-medium font-sans text-muted text-center">
-            Sucursal
-          </label>
+        <FormField label="Sucursal" htmlFor="branchId" error={errors.branchId?.message}>
           <select
-            id="pin-branch"
-            value={selectedBranch}
-            onChange={(e) => setSelectedBranch(e.target.value)}
-            className="h-9 w-full rounded-lg border border-rule bg-cream px-3 text-sm font-sans focus:outline-none focus:ring-2 focus:ring-accent"
+            id="branchId"
+            className="flex h-10 w-full rounded border border-rule bg-paper px-3 py-2 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            {...register('branchId')}
           >
             {branches.map((b) => (
-              <option key={b.id} value={b.id}>{b.name}</option>
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
             ))}
           </select>
-        </div>
+        </FormField>
       )}
 
-      {error && (
-        <div role="alert" className="w-full rounded-md bg-destructive/10 px-3 py-2 text-center text-sm text-destructive">
-          {error}
-        </div>
+      <FormField label="PIN" htmlFor="pin" error={errors.pin?.message}>
+        <Input
+          id="pin"
+          type="password"
+          inputMode="numeric"
+          pattern="\d{4}"
+          maxLength={4}
+          placeholder="••••"
+          className="text-center text-2xl tracking-[0.5em]"
+          error={!!errors.pin}
+          autoFocus
+          {...register('pin')}
+        />
+      </FormField>
+
+      {errors.root && (
+        <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-600 text-center">
+          {errors.root.message}
+        </p>
       )}
 
-      <div className="flex gap-3" role="group" aria-label="PIN de 4 dígitos">
-        {pin.map((digit, i) => (
-          <input
-            key={i}
-            ref={(el) => { inputRefs.current[i] = el; }}
-            type="tel"
-            inputMode="numeric"
-            maxLength={1}
-            value={digit}
-            onChange={(e) => handleDigit(i, e.target.value)}
-            onKeyDown={(e) => handleKeyDown(i, e)}
-            aria-label={`Dígito ${i + 1} del PIN`}
-            disabled={isPending}
-            className="h-14 w-14 rounded-xl border-2 border-rule bg-cream text-center font-mono text-xl font-bold text-ink focus:border-accent focus:outline-none disabled:opacity-50"
-          />
-        ))}
-      </div>
-
-      {isPending && (
-        <p className="text-xs font-sans text-muted">Verificando...</p>
-      )}
-
-      <Button variant="ghost" size="sm" asChild>
-        <a href="/auth/login">Acceso de administrador</a>
+      <Button type="submit" disabled={isPending} size="lg" className="w-full">
+        {isPending ? 'Verificando…' : 'Entrar'}
       </Button>
-    </div>
+    </form>
   );
 }

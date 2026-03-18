@@ -1,49 +1,30 @@
 import type { Metadata } from 'next';
+import { requireAdminSession } from '@/lib/auth/get-session';
 import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
 import { ScheduleManager } from './ScheduleManager';
 
-export const metadata: Metadata = { title: 'Horarios — Configuración' };
+export const metadata: Metadata = { title: 'Horarios' };
 
 export default async function SchedulesPage() {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/auth/login');
-
-  const { data: staffUser } = await supabase
-    .from('staff_users')
-    .select('organization_id')
-    .eq('auth_user_id', user.id)
-    .single();
-  if (!staffUser) redirect('/auth/login');
 
   const { data: branches } = await supabase
     .from('branches')
-    .select('id, name, is_temporarily_closed, closed_message')
-    .eq('organization_id', staffUser.organization_id)
-    .eq('is_active', true)
-    .is('deleted_at', null);
+    .select('*')
+    .eq('organization_id', org.id)
+    .order('created_at');
 
-  // Fetch schedules for all branches
   const branchIds = (branches ?? []).map((b) => b.id);
-  const { data: schedules } = branchIds.length > 0
-    ? await supabase
-        .from('branch_schedules')
-        .select('*')
-        .in('branch_id', branchIds)
-    : { data: [] };
+  const { data: allSchedules } = branchIds.length
+    ? await supabase.from('branch_schedules').select('*').in('branch_id', branchIds)
+    : { data: [] as { id: string; branch_id: string; day_of_week: number; opens_at: string | null; closes_at: string | null; is_closed: boolean }[] };
 
-  return (
-    <div>
-      <h2 className="mb-4 font-display text-xl font-bold text-ink">Horarios</h2>
-      <ScheduleManager
-        branches={branches ?? []}
-        schedules={schedules ?? []}
-        orgId={staffUser.organization_id}
-      />
-    </div>
-  );
+  const schedulesByBranch: Record<string, NonNullable<typeof allSchedules>> = {};
+  for (const s of allSchedules ?? []) {
+    if (!schedulesByBranch[s.branch_id]) schedulesByBranch[s.branch_id] = [];
+    schedulesByBranch[s.branch_id]!.push(s);
+  }
+
+  return <ScheduleManager branches={branches ?? []} schedulesByBranch={schedulesByBranch} />;
 }

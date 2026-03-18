@@ -1,60 +1,53 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { requireAdminSession } from '@/lib/auth/get-session';
 import { createClient } from '@/lib/supabase/server';
-import { requireOrgSession, requireAuthSession } from '@/lib/auth/get-session';
+import type { ScheduleInput } from '@menuos/shared';
 
-interface DayScheduleInput {
-  day_of_week: number;
-  opens_at: string;
-  closes_at: string;
-  is_open: boolean;
+export async function upsertSchedules(branchId: string, schedules: ScheduleInput[]) {
+  const { org } = await requireAdminSession();
+  const supabase = await createClient();
+
+  // Verify branch belongs to org
+  const { data: branch } = await supabase
+    .from('branches')
+    .select('id')
+    .eq('id', branchId)
+    .eq('organization_id', org.id)
+    .single();
+
+  if (!branch) return { error: 'Sucursal no encontrada.' };
+
+  const upserts = schedules.map((s) =>
+    supabase
+      .from('branch_schedules')
+      .upsert(
+        {
+          branch_id: branchId,
+          day_of_week: s.day_of_week,
+          opens_at: s.opens_at ?? null,
+          closes_at: s.closes_at ?? null,
+          is_closed: s.is_closed,
+        },
+        { onConflict: 'branch_id,day_of_week' },
+      ),
+  );
+
+  await Promise.all(upserts);
+  revalidatePath('/settings/schedules');
 }
 
-export async function saveSchedules(
-  branchId: string,
-  orgId: string,
-  days: DayScheduleInput[]
-): Promise<{ success: boolean; error?: string }> {
-  if (!branchId || !orgId) return { success: false, error: 'Datos inválidos' };
-
-  try {
-    await requireOrgSession(orgId);
-  } catch {
-    return { success: false, error: 'Sin autorización' };
-  }
-
+export async function toggleBranchTemporaryClosed(branchId: string, isClosed: boolean) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
-  const upsertData = days.map((d) => ({
-    branch_id: branchId,
-    organization_id: orgId,
-    day_of_week: d.day_of_week,
-    opens_at: d.opens_at,
-    closes_at: d.closes_at,
-    is_open: d.is_open,
-  }));
 
   const { error } = await supabase
-    .from('branch_schedules')
-    .upsert(upsertData, { onConflict: 'branch_id,day_of_week' });
+    .from('branches')
+    .update({ is_temporarily_closed: isClosed })
+    .eq('id', branchId)
+    .eq('organization_id', org.id);
 
-  if (error) return { success: false, error: error.message };
-
-  revalidatePath('/admin/settings/schedules');
-  return { success: true };
-}
-
-export async function toggleTemporarilyClosed(
-  branchId: string,
-  closed: boolean
-): Promise<{ success: boolean }> {
-  try {
-    await requireAuthSession();
-  } catch {
-    return { success: false };
-  }
-  const supabase = await createClient();
-  await supabase.from('branches').update({ is_temporarily_closed: closed }).eq('id', branchId);
-  revalidatePath('/admin/settings/schedules');
-  return { success: true };
+  if (error) return { error: 'Error al cambiar estado.' };
+  revalidatePath('/settings/schedules');
 }

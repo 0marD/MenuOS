@@ -1,56 +1,79 @@
-import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
 import { WaiterOrderList } from './WaiterOrderList';
-
-export const metadata: Metadata = { title: 'Pedidos — Mesero' };
+import { TableMap } from './TableMap';
+import { WaiterTabs } from './WaiterTabs';
+import { logoutPin } from '@/lib/auth/pin-actions';
 
 export default async function WaiterPage() {
+  const jar = await cookies();
+  const staffId = jar.get('menuos_staff_id')!.value;
+  const branchId = jar.get('menuos_branch_id')!.value;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/auth/pin');
 
-  const { data: staffUser } = await supabase
-    .from('staff_users')
-    .select('organization_id, branch_id')
-    .eq('auth_user_id', user.id)
-    .single();
-  if (!staffUser) redirect('/auth/pin');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  // Fetch active orders (not delivered/cancelled) for this branch
-  const query = supabase
-    .from('orders')
-    .select(`
-      id, table_number, status, total, customer_name, round, created_at, notes,
-      order_items ( id, name, price, quantity, notes, is_ready )
-    `)
-    .eq('organization_id', staffUser.organization_id)
-    .not('status', 'in', '("delivered","cancelled")')
-    .is('deleted_at', null)
-    .order('created_at', { ascending: true });
+  const [{ data: staff }, { data: orders }, { data: tables }] = await Promise.all([
+    supabase.from('staff_users').select('name').eq('id', staffId).single(),
+    supabase
+      .from('orders')
+      .select('*, order_items(*)')
+      .eq('branch_id', branchId)
+      .gte('created_at', today.toISOString())
+      .order('created_at'),
+    supabase
+      .from('restaurant_tables')
+      .select('id, name, zone, is_active, qr_token, branch_id, organization_id, created_at, updated_at')
+      .eq('branch_id', branchId)
+      .eq('is_active', true)
+      .order('name'),
+  ]);
 
-  if (staffUser.branch_id) {
-    query.eq('branch_id', staffUser.branch_id);
-  }
+  const activeCount = (orders ?? []).filter(
+    (o) => !['delivered', 'cancelled'].includes(o.status),
+  ).length;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: rawOrders } = await query;
-  const orders = (rawOrders ?? []) as any[];
+  const tableOrders = (orders ?? []).map((o) => ({
+    id: o.id,
+    table_id: o.table_id,
+    status: o.status,
+  }));
 
   return (
-    <div className="p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="font-display text-xl font-bold text-paper">Pedidos activos</h1>
-        <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-mono text-white/70">
-          {orders.length} pedidos
-        </span>
-      </div>
-      <WaiterOrderList
-        orders={orders}
-        orgId={staffUser.organization_id}
-      />
+    <div className="min-h-screen bg-paper">
+      <header className="sticky top-0 z-10 flex items-center justify-between border-b border-rule bg-paper px-4 py-3">
+        <p className="font-display text-lg font-bold text-ink">
+          Hola, {staff?.name ?? 'Mesero'} 👋
+        </p>
+        <div className="flex items-center gap-3">
+          {activeCount > 0 && (
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-xs font-bold text-white">
+              {activeCount}
+            </span>
+          )}
+          <form action={logoutPin}>
+            <button type="submit" className="text-xs text-muted hover:text-ink">
+              Salir
+            </button>
+          </form>
+        </div>
+      </header>
+
+      <main className="p-4">
+        <WaiterTabs
+          ordersView={
+            <WaiterOrderList initialOrders={orders ?? []} branchId={branchId} />
+          }
+          tablesView={
+            <TableMap
+              tables={tables ?? []}
+              initialOrders={tableOrders}
+              branchId={branchId}
+            />
+          }
+        />
+      </main>
     </div>
   );
 }

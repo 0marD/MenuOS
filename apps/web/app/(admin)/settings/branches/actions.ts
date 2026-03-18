@@ -1,94 +1,69 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { requireAdminSession } from '@/lib/auth/get-session';
 import { createClient } from '@/lib/supabase/server';
-import { branchSchema, type BranchInput } from '@menuos/shared/validations';
-import { requireAuthSession, requireOrgSession } from '@/lib/auth/get-session';
+import type { BranchInput } from '@menuos/shared';
 
-export async function createBranch(
-  orgId: string,
-  data: BranchInput
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const session = await requireOrgSession(orgId);
-    if (!['super_admin', 'manager'].includes(session.role)) {
-      return { success: false, error: 'Sin autorización' };
-    }
-  } catch {
-    return { success: false, error: 'Sin autorización' };
-  }
-
-  const parsed = branchSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: 'Datos inválidos' };
-
+export async function createBranch(data: BranchInput) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
+
   const { error } = await supabase.from('branches').insert({
-    organization_id: orgId,
-    name: parsed.data.name,
-    address: parsed.data.address ?? null,
-    timezone: parsed.data.timezone,
-    is_active: parsed.data.is_active,
+    organization_id: org.id,
+    name: data.name,
+    address: data.address ?? null,
+    phone: data.phone ?? null,
+    timezone: data.timezone,
   });
 
-  if (error) return { success: false, error: 'No se pudo crear la sucursal' };
-
-  revalidatePath('/admin/settings/branches');
-  return { success: true };
+  if (error) return { error: 'Error al crear la sucursal.' };
+  revalidatePath('/settings/branches');
 }
 
-export async function updateBranch(
-  id: string,
-  data: BranchInput
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    await requireAuthSession();
-  } catch {
-    return { success: false, error: 'Sin autorización' };
-  }
-
-  const parsed = branchSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: 'Datos inválidos' };
-
+export async function updateBranch(id: string, data: BranchInput) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
+
   const { error } = await supabase
     .from('branches')
     .update({
-      name: parsed.data.name,
-      address: parsed.data.address ?? null,
-      timezone: parsed.data.timezone,
-      is_active: parsed.data.is_active,
+      name: data.name,
+      address: data.address ?? null,
+      phone: data.phone ?? null,
+      timezone: data.timezone,
     })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('organization_id', org.id);
 
-  if (error) return { success: false, error: 'No se pudo actualizar la sucursal' };
-
-  revalidatePath('/admin/settings/branches');
-  return { success: true };
+  if (error) return { error: 'Error al actualizar la sucursal.' };
+  revalidatePath('/settings/branches');
 }
 
-export async function deleteBranch(id: string): Promise<{ success: boolean }> {
-  try {
-    await requireAuthSession();
-  } catch {
-    return { success: false };
-  }
+export async function toggleBranchActive(id: string, isActive: boolean) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
-  await supabase
+
+  const { error } = await supabase
     .from('branches')
-    .update({ deleted_at: new Date().toISOString(), is_active: false })
-    .eq('id', id);
-  revalidatePath('/admin/settings/branches');
-  return { success: true };
+    .update({ is_active: isActive })
+    .eq('id', id)
+    .eq('organization_id', org.id);
+
+  if (error) return { error: 'Error al cambiar estado de la sucursal.' };
+  revalidatePath('/settings/branches');
 }
 
-export async function toggleBranchActive(id: string, active: boolean): Promise<{ success: boolean }> {
-  try {
-    await requireAuthSession();
-  } catch {
-    return { success: false };
-  }
+export async function deleteBranch(id: string) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
-  await supabase.from('branches').update({ is_active: active }).eq('id', id);
-  revalidatePath('/admin/settings/branches');
-  return { success: true };
+
+  const { error } = await supabase
+    .from('branches')
+    .delete()
+    .eq('id', id)
+    .eq('organization_id', org.id);
+
+  if (error) return { error: 'Error al eliminar la sucursal.' };
+  revalidatePath('/settings/branches');
 }

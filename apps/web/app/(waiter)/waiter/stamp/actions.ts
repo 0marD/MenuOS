@@ -1,177 +1,83 @@
 'use server';
 
+import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 
-export async function findCustomer(
-  orgId: string,
-  programId: string,
-  phoneLast4: string
-): Promise<{
-  id: string;
-  name: string;
-  stamp_count: number;
-  is_complete: boolean;
-  stamp_card_id: string | null;
-  reward_code: string | null;
-  reward_redeemed: boolean;
-} | null> {
-  const supabase = await createClient();
-
-  const { data: customer } = await supabase
-    .from('customers')
-    .select('id, name')
-    .eq('organization_id', orgId)
-    .eq('phone_last4', phoneLast4)
-    .is('deleted_at', null)
-    .single();
-
-  if (!customer) return null;
-
-  const { data: card } = await supabase
-    .from('stamp_cards')
-    .select('id, stamp_count, is_complete')
-    .eq('program_id', programId)
-    .eq('customer_id', customer.id)
-    .maybeSingle();
-
-  let rewardCode: string | null = null;
-  let rewardRedeemed = false;
-
-  if (card?.is_complete) {
-    const { data: reward } = await supabase
-      .from('rewards')
-      .select('code, redeemed_at')
-      .eq('stamp_card_id', card.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-    if (reward) {
-      rewardCode = reward.code;
-      rewardRedeemed = reward.redeemed_at !== null;
-    }
-  }
-
-  return {
-    id: customer.id,
-    name: customer.name,
-    stamp_count: card?.stamp_count ?? 0,
-    is_complete: card?.is_complete ?? false,
-    stamp_card_id: card?.id ?? null,
-    reward_code: rewardCode,
-    reward_redeemed: rewardRedeemed,
-  };
+async function requireWaiterSession() {
+  const jar = await cookies();
+  const staffId = jar.get('menuos_staff_id')?.value;
+  const branchId = jar.get('menuos_branch_id')?.value;
+  if (!staffId || !branchId) throw new Error('Unauthorized');
+  return { staffId, branchId };
 }
 
-interface GrantStampInput {
-  customerId: string;
-  programId: string;
-  stampCardId: string | null;
-  orgId: string;
-  branchId: string | null;
-  staffId: string;
+export async function findCustomerByPhone(phone: string, orgId: string) {
+  const supabase = await createClient();
+  const encoder = new TextEncoder();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(phone));
+  const hash = Buffer.from(hashBuffer).toString('hex');
+
+  const { data } = await supabase
+    .from('customers')
+    .select('id, name, visit_count, segment')
+    .eq('organization_id', orgId)
+    .eq('phone_hash', hash)
+    .single();
+
+  if (!data) return { error: 'Cliente no encontrado.' };
+  return { customer: data };
 }
 
 export async function grantStamp(
-  input: GrantStampInput
-): Promise<{ success: boolean; completed?: boolean; error?: string }> {
+  customerId: string,
+  programId: string,
+  orgId: string,
+  tableId?: string | null,
+) {
+  const { staffId, branchId } = await requireWaiterSession();
   const supabase = await createClient();
 
-  // Upsert stamp card
-  let cardId = input.stampCardId;
-  if (!cardId) {
-    const { data: newCard, error } = await supabase
-      .from('stamp_cards')
-      .insert({
-        program_id: input.programId,
-        customer_id: input.customerId,
-        organization_id: input.orgId,
-      })
-      .select('id')
-      .single();
-    if (error || !newCard) return { success: false, error: 'Error al crear tarjeta' };
-    cardId = newCard.id;
-  }
-
-  // Insert stamp (unique index prevents double stamps per day)
-  const { error: stampError } = await supabase.from('stamps').insert({
-    stamp_card_id: cardId,
-    customer_id: input.customerId,
-    branch_id: input.branchId,
-    granted_by: input.staffId,
+  // Delegate to Edge Function for anti-fraud validation + business logic
+  const { data, error } = await supabase.functions.invoke('grant-stamp', {
+    body: {
+      customer_id: customerId,
+      program_id: programId,
+      organization_id: orgId,
+      branch_id: branchId,
+      table_id: tableId ?? null,
+      granted_by: staffId,
+    },
   });
 
-  if (stampError) {
-    if (stampError.code === '23505') return { success: false, error: 'Ya se otorgó un sello hoy' };
-    return { success: false, error: 'Error al otorgar sello' };
-  }
+  if (error) return { error: 'Error al comunicarse con el servidor.' };
+  if (data?.error) return { error: data.error };
 
-  // Check if program completed
-  const { data: program } = await supabase
-    .from('loyalty_programs')
-    .select('stamps_required, expiration_days, reward_value')
-    .eq('id', input.programId)
-    .single();
-
-  const { data: card } = await supabase
-    .from('stamp_cards')
-    .select('stamp_count')
-    .eq('id', cardId)
-    .single();
-
-  const newCount = (card?.stamp_count ?? 0) + 1;
-  let completed = false;
-
-  if (program && newCount >= program.stamps_required) {
-    completed = true;
-    const expiresAt = program.expiration_days
-      ? new Date(Date.now() + program.expiration_days * 86_400_000).toISOString()
-      : null;
-
-    await supabase
-      .from('stamp_cards')
-      .update({ stamp_count: newCount, is_complete: true, completed_at: new Date().toISOString() })
-      .eq('id', cardId);
-
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    await supabase.from('rewards').insert({
-      stamp_card_id: cardId,
-      customer_id: input.customerId,
-      organization_id: input.orgId,
-      code,
-      ...(expiresAt ? { expires_at: expiresAt } : {}),
-    });
-  } else {
-    await supabase
-      .from('stamp_cards')
-      .update({ stamp_count: newCount })
-      .eq('id', cardId);
-  }
-
-  return { success: true, completed };
+  return {
+    stampsCount: data.stampsCount as number,
+    isComplete: data.isComplete as boolean,
+    reward: data.reward as string | undefined,
+    rewardCode: data.rewardCode as string | undefined,
+  };
 }
 
-export async function redeemReward(
-  code: string
-): Promise<{ success: boolean; error?: string }> {
+export async function redeemReward(code: string, orgId: string) {
+  const { staffId } = await requireWaiterSession();
   const supabase = await createClient();
 
   const { data: reward } = await supabase
     .from('rewards')
-    .select('id, redeemed_at, expires_at')
-    .eq('code', code)
+    .select('id, is_redeemed')
+    .eq('code', code.toUpperCase())
+    .eq('organization_id', orgId)
     .single();
 
-  if (!reward) return { success: false, error: 'Código no encontrado' };
-  if (reward.redeemed_at) return { success: false, error: 'Ya fue canjeado' };
-  if (reward.expires_at && new Date(reward.expires_at) < new Date()) {
-    return { success: false, error: 'Código expirado' };
-  }
+  if (!reward) return { error: 'Código inválido.' };
+  if (reward.is_redeemed) return { error: 'Este código ya fue canjeado.' };
 
-  const { error } = await supabase
+  await supabase
     .from('rewards')
-    .update({ redeemed_at: new Date().toISOString() })
+    .update({ is_redeemed: true, redeemed_at: new Date().toISOString(), redeemed_by: staffId })
     .eq('id', reward.id);
 
-  if (error) return { success: false, error: 'Error al canjear' };
   return { success: true };
 }

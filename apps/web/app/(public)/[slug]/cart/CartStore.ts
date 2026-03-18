@@ -1,32 +1,32 @@
-'use client';
-
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export interface CartItem {
-  id: string;        // menu_item_id
+  id: string;
   name: string;
   price: number;
   quantity: number;
   notes?: string;
 }
 
-interface CartState {
+interface CartStore {
   items: CartItem[];
-  tableToken: string | null;
+  orgSlug: string | null;
+  tableId: string | null;
   addItem: (item: Omit<CartItem, 'quantity'>) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
-  setTableToken: (token: string) => void;
-  clear: () => void;
+  clearCart: () => void;
+  setContext: (orgSlug: string, tableId: string | null) => void;
   total: () => number;
 }
 
-export const useCartStore = create<CartState>()(
+export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
       items: [],
-      tableToken: null,
+      orgSlug: null,
+      tableId: null,
 
       addItem: (item) =>
         set((state) => {
@@ -34,7 +34,7 @@ export const useCartStore = create<CartState>()(
           if (existing) {
             return {
               items: state.items.map((i) =>
-                i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+                i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i,
               ),
             };
           }
@@ -52,19 +52,19 @@ export const useCartStore = create<CartState>()(
               : state.items.map((i) => (i.id === id ? { ...i, quantity } : i)),
         })),
 
-      setTableToken: (token) => set({ tableToken: token }),
+      clearCart: () => set({ items: [] }),
 
-      clear: () => set({ items: [], tableToken: null }),
+      setContext: (orgSlug, tableId) => set({ orgSlug, tableId }),
 
-      total: () =>
-        get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+      total: () => get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
     }),
     {
       name: 'menuos-cart',
       partialize: (state) => ({
         items: state.items,
-        tableToken: state.tableToken,
+        orgSlug: state.orgSlug,
+        tableId: state.tableId,
       }),
-    }
-  )
+    },
+  ),
 );

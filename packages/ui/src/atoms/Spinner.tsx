@@ -5,27 +5,23 @@ interface SpinnerProps extends React.HTMLAttributes<HTMLDivElement> {
   size?: 'sm' | 'md' | 'lg';
 }
 
-function Spinner({ className, size = 'md', ...props }: SpinnerProps) {
-  const sizeClasses = {
-    sm: 'h-4 w-4 border-2',
-    md: 'h-6 w-6 border-2',
-    lg: 'h-8 w-8 border-[3px]',
-  };
+const sizeMap = {
+  sm: 'h-4 w-4 border-2',
+  md: 'h-6 w-6 border-2',
+  lg: 'h-8 w-8 border-[3px]',
+};
 
+export function Spinner({ size = 'md', className, ...props }: SpinnerProps) {
   return (
     <div
       role="status"
       aria-label="Cargando"
       className={cn(
-        'animate-spin rounded-full border-current border-t-transparent',
-        sizeClasses[size],
-        className
+        'animate-spin rounded-full border-rule border-t-accent',
+        sizeMap[size],
+        className,
       )}
       {...props}
-    >
-      <span className="sr-only">Cargando...</span>
-    </div>
+    />
   );
 }
-
-export { Spinner };

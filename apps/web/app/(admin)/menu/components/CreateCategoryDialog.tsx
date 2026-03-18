@@ -1,81 +1,139 @@
 'use client';
 
-import { useTransition } from 'react';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { X } from 'lucide-react';
-import { Button } from '@menuos/ui/atoms/Button';
-import { FormField } from '@menuos/ui/molecules/FormField';
-import { menuCategorySchema, type MenuCategoryInput } from '@menuos/shared/validations';
+import { Plus } from 'lucide-react';
+import { useState, useTransition } from 'react';
+import { useForm } from 'react-hook-form';
+import { Button, FormField, Input, Switch } from '@menuos/ui';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { categorySchema, type CategoryInput } from '@menuos/shared';
 import { createCategory } from '../actions';
-import type { Tables } from '@menuos/database/types';
 
-interface CreateCategoryDialogProps {
-  onCreated: (category: Tables<'menu_categories'>) => void;
-  onClose: () => void;
-}
-
-export function CreateCategoryDialog({ onCreated, onClose }: CreateCategoryDialogProps) {
+export function CreateCategoryDialog() {
+  const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
+    reset,
+    setError,
     formState: { errors },
-  } = useForm<MenuCategoryInput>({
-    resolver: zodResolver(menuCategorySchema),
-    defaultValues: { sort_order: 0, is_visible: true },
+  } = useForm<CategoryInput>({
+    resolver: zodResolver(categorySchema),
+    defaultValues: { is_visible: true },
   });
 
-  function onSubmit(data: MenuCategoryInput) {
+  const isVisible = watch('is_visible');
+
+  function onSubmit(data: CategoryInput) {
     startTransition(async () => {
       const result = await createCategory(data);
-      if (result.data) {
-        onCreated(result.data);
+      if (result?.error) {
+        setError('root', { message: result.error });
+        return;
       }
+      reset();
+      setOpen(false);
     });
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-category-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
-    >
-      <div className="w-full max-w-sm rounded-xl bg-paper p-5 shadow-lg">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 id="create-category-title" className="font-display text-lg font-bold text-ink">
-            Nueva categoría
-          </h2>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Cerrar">
-            <X className="h-4 w-4" aria-hidden="true" />
-          </Button>
-        </div>
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3">
-          <FormField
-            label="Nombre"
-            placeholder="Ej: Tacos, Bebidas, Postres"
-            required
-            error={errors.name?.message}
-            {...register('name')}
-          />
-          <FormField
-            label="Ícono (emoji)"
-            placeholder="🌮"
-            error={errors.icon?.message}
-            {...register('icon')}
-          />
-          <div className="mt-2 flex gap-2">
-            <Button type="button" variant="outline" className="flex-1" onClick={onClose}>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Plus className="h-4 w-4" />
+          Nueva categoría
+        </Button>
+      </DialogTrigger>
+
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Nueva categoría</DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
+          <FormField label="Nombre" htmlFor="cat-name" error={errors.name?.message} required>
+            <Input
+              id="cat-name"
+              placeholder="Entradas, Postres, Bebidas…"
+              error={!!errors.name}
+              autoFocus
+              {...register('name')}
+            />
+          </FormField>
+
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label="Ícono (emoji)" htmlFor="cat-icon" error={errors.icon?.message}>
+              <Input
+                id="cat-icon"
+                placeholder="🍕"
+                maxLength={4}
+                className="text-xl"
+                {...register('icon')}
+              />
+            </FormField>
+
+            <FormField label="Color (hex)" htmlFor="cat-color" error={errors.color?.message}>
+              <div className="flex gap-2">
+                <Input
+                  id="cat-color"
+                  placeholder="#D4500A"
+                  maxLength={7}
+                  {...register('color')}
+                />
+                <input
+                  type="color"
+                  className="h-10 w-10 shrink-0 cursor-pointer rounded border border-rule"
+                  onChange={(e) => setValue('color', e.target.value)}
+                  aria-label="Seleccionar color"
+                />
+              </div>
+            </FormField>
+          </div>
+
+          <div className="flex items-center justify-between rounded border border-rule px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-ink">Visible en el menú</p>
+              <p className="text-xs text-muted">Los comensales pueden verla</p>
+            </div>
+            <Switch
+              checked={isVisible}
+              onCheckedChange={(v) => setValue('is_visible', v)}
+              aria-label="Visibilidad de la categoría"
+            />
+          </div>
+
+          {errors.root && (
+            <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-600">
+              {errors.root.message}
+            </p>
+          )}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={isPending}
+            >
               Cancelar
             </Button>
-            <Button type="submit" className="flex-1" disabled={isPending}>
-              {isPending ? 'Creando...' : 'Crear'}
+            <Button type="submit" disabled={isPending}>
+              {isPending ? 'Creando…' : 'Crear categoría'}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

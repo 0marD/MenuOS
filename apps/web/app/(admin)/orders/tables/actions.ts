@@ -1,91 +1,54 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { requireAdminSession } from '@/lib/auth/get-session';
 import { createClient } from '@/lib/supabase/server';
-import { requireOrgSession, requireAuthSession } from '@/lib/auth/get-session';
 
-interface TableData {
-  number: number;
-  label: string | null;
-  zone: string | null;
-  capacity: number;
+function generateToken() {
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function createTable(
-  orgId: string,
-  branchId: string,
-  data: TableData
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    await requireOrgSession(orgId);
-  } catch {
-    return { success: false, error: 'Sin autorización' };
-  }
-
+export async function createTable(branchId: string, name: string, zone?: string) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
+
   const { error } = await supabase.from('restaurant_tables').insert({
-    organization_id: orgId,
+    organization_id: org.id,
     branch_id: branchId,
-    number: data.number,
-    label: data.label,
-    zone: data.zone,
-    capacity: data.capacity,
+    name,
+    zone: zone || null,
+    qr_token: generateToken(),
   });
 
-  if (error) {
-    const msg = error.code === '23505' ? 'Ya existe una mesa con ese número' : 'No se pudo crear la mesa';
-    return { success: false, error: msg };
-  }
-
-  revalidatePath('/admin/orders/tables');
-  return { success: true };
+  if (error) return { error: 'Error al crear la mesa.' };
+  revalidatePath('/orders/tables');
 }
 
-export async function updateTable(
-  id: string,
-  data: TableData
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    await requireAuthSession();
-  } catch {
-    return { success: false, error: 'Sin autorización' };
-  }
-
+export async function deleteTable(id: string) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
+
   const { error } = await supabase
     .from('restaurant_tables')
-    .update({ number: data.number, label: data.label, zone: data.zone, capacity: data.capacity })
-    .eq('id', id);
+    .delete()
+    .eq('id', id)
+    .eq('organization_id', org.id);
 
-  if (error) return { success: false, error: 'No se pudo actualizar la mesa' };
-
-  revalidatePath('/admin/orders/tables');
-  return { success: true };
+  if (error) return { error: 'Error al eliminar la mesa.' };
+  revalidatePath('/orders/tables');
 }
 
-export async function deleteTable(id: string): Promise<{ success: boolean }> {
-  try {
-    await requireAuthSession();
-  } catch {
-    return { success: false };
-  }
+export async function toggleTableActive(id: string, isActive: boolean) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
-  await supabase
+
+  const { error } = await supabase
     .from('restaurant_tables')
-    .update({ deleted_at: new Date().toISOString(), is_active: false })
-    .eq('id', id);
-  revalidatePath('/admin/orders/tables');
-  return { success: true };
-}
+    .update({ is_active: isActive })
+    .eq('id', id)
+    .eq('organization_id', org.id);
 
-export async function toggleTableActive(id: string, active: boolean): Promise<{ success: boolean }> {
-  try {
-    await requireAuthSession();
-  } catch {
-    return { success: false };
-  }
-  const supabase = await createClient();
-  await supabase.from('restaurant_tables').update({ is_active: active }).eq('id', id);
-  revalidatePath('/admin/orders/tables');
-  return { success: true };
+  if (error) return { error: 'Error al cambiar estado.' };
+  revalidatePath('/orders/tables');
 }

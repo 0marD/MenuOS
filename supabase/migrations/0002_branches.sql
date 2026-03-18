@@ -1,24 +1,21 @@
--- Migration: branches
--- Phase 0.11
-
-create table public.branches (
-  id                      uuid primary key default gen_random_uuid(),
-  organization_id         uuid not null references public.organizations(id) on delete cascade,
-  name                    text not null,
-  address                 text,
-  timezone                text not null default 'America/Mexico_City',
-  is_active               boolean not null default true,
-  is_temporarily_closed   boolean not null default false,
-  closed_message          text,
-  deleted_at              timestamptz,
-  created_at              timestamptz not null default now(),
-  updated_at              timestamptz not null default now()
+CREATE TABLE branches (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  address TEXT,
+  phone TEXT,
+  latitude DOUBLE PRECISION,
+  longitude DOUBLE PRECISION,
+  timezone TEXT NOT NULL DEFAULT 'America/Mexico_City',
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  is_temporarily_closed BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-create index branches_org_idx on public.branches (organization_id) where deleted_at is null;
+CREATE TRIGGER branches_updated_at
+  BEFORE UPDATE ON branches
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-alter table public.branches enable row level security;
-
-create trigger branches_updated_at
-  before update on public.branches
-  for each row execute function public.set_updated_at();
+CREATE INDEX idx_branches_organization_id ON branches(organization_id);
+CREATE INDEX idx_branches_active ON branches(organization_id, is_active);

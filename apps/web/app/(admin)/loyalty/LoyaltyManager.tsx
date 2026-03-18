@@ -1,280 +1,205 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Gift, Stamp } from 'lucide-react';
-import { Button } from '@menuos/ui/atoms/Button';
-import { Badge } from '@menuos/ui/atoms/Badge';
-import { Switch } from '@menuos/ui/atoms/Switch';
-import { cn } from '@menuos/ui';
-import { loyaltyProgramSchema, type LoyaltyProgramInput } from '@menuos/shared/validations';
+import { Plus } from 'lucide-react';
+import { useState, useTransition } from 'react';
+import { useForm } from 'react-hook-form';
+import { Badge, Button, FormField, Input, Switch } from '@menuos/ui';
+import { loyaltyProgramSchema, type LoyaltyProgramInput } from '@menuos/shared';
+import type { Tables } from '@menuos/database';
 import { createLoyaltyProgram, toggleLoyaltyProgram } from './actions';
 
-interface Program {
-  id: string;
-  name: string;
-  stamps_required: number;
-  reward_type: 'free_item' | 'discount' | 'custom';
-  reward_value: string;
-  expiration_days: number | null;
-  is_active: boolean;
-}
+type Program = Tables<'loyalty_programs'> & {
+  _count?: { stamp_cards: number };
+};
 
 interface LoyaltyManagerProps {
   programs: Program[];
-  analytics: Record<string, { total: number; completed: number }>;
-  orgId: string;
-  isAdmin: boolean;
+  totalCards: number;
+  totalStamps: number;
 }
 
-const REWARD_TYPE_LABELS: Record<string, string> = {
-  free_item: 'Producto gratis',
-  discount: 'Descuento',
-  custom: 'Personalizado',
-};
-
-function StampDots({ count, required }: { count: number; required: number }) {
-  return (
-    <div className="flex flex-wrap gap-1" aria-label={`${count} de ${required} sellos`}>
-      {Array.from({ length: required }, (_, i) => (
-        <span
-          key={i}
-          className={cn(
-            'inline-block h-4 w-4 rounded-full border-2',
-            i < count ? 'border-accent bg-accent' : 'border-rule bg-cream'
-          )}
-          aria-hidden="true"
-        />
-      ))}
-    </div>
-  );
-}
-
-export function LoyaltyManager({ programs, analytics, orgId, isAdmin }: LoyaltyManagerProps) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [showForm, setShowForm] = useState(false);
-  const [serverError, setServerError] = useState<string | null>(null);
+export function LoyaltyManager({ programs, totalCards, totalStamps }: LoyaltyManagerProps) {
+  const [showCreate, setShowCreate] = useState(false);
+  const [, startTransition] = useTransition();
 
   const {
     register,
     handleSubmit,
+    setError,
     reset,
-    watch,
     formState: { errors },
   } = useForm<LoyaltyProgramInput>({
     resolver: zodResolver(loyaltyProgramSchema),
-    defaultValues: {
-      stamps_required: 8,
-      reward_type: 'free_item',
-      expiration_days: 90,
-    },
+    defaultValues: { stamps_required: 8, reward_type: 'free_item' },
   });
 
-  const rewardType = watch('reward_type');
-
   function onSubmit(data: LoyaltyProgramInput) {
-    setServerError(null);
     startTransition(async () => {
-      const result = await createLoyaltyProgram(orgId, data);
-      if (result.success) {
-        reset();
-        setShowForm(false);
-        router.refresh();
-      } else {
-        setServerError(result.error ?? 'Error al crear el programa');
+      const result = await createLoyaltyProgram(data);
+      if (result?.error) {
+        setError('root', { message: result.error });
+        return;
       }
+      reset();
+      setShowCreate(false);
     });
   }
 
-  function handleToggle(id: string, active: boolean) {
-    startTransition(async () => {
-      await toggleLoyaltyProgram(id, active);
-      router.refresh();
-    });
+  function handleToggle(id: string, isActive: boolean) {
+    startTransition(async () => { await toggleLoyaltyProgram(id, isActive); });
   }
 
   return (
-    <div className="space-y-4">
-      {isAdmin && (
-        <div className="flex justify-end">
-          <Button size="sm" onClick={() => setShowForm((s) => !s)}>
-            <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+    <div className="flex flex-col gap-6">
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'Programas', value: programs.length },
+          { label: 'Tarjetas activas', value: totalCards },
+          { label: 'Sellos emitidos', value: totalStamps },
+        ].map((m) => (
+          <div key={m.label} className="rounded-xl border border-rule bg-paper p-4 text-center">
+            <p className="font-display text-2xl font-bold text-ink">{m.value}</p>
+            <p className="mt-0.5 text-xs text-muted">{m.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-base font-semibold text-ink">Programas</h2>
+        {!showCreate && (
+          <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1.5">
+            <Plus className="h-4 w-4" />
             Nuevo programa
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Create form */}
-      {showForm && isAdmin && (
+      {showCreate && (
         <form
           onSubmit={handleSubmit(onSubmit)}
-          className="rounded-xl border-2 border-accent bg-card p-4 space-y-3"
-          aria-label="Nuevo programa de fidelidad"
+          className="rounded-xl border border-accent/30 bg-paper p-5 flex flex-col gap-4"
+          noValidate
         >
-          <p className="font-sans font-medium text-ink">Nuevo programa de fidelidad</p>
+          <h3 className="font-semibold text-ink">Nuevo programa de sellos</h3>
 
-          {serverError && (
-            <div role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {serverError}
-            </div>
-          )}
+          <FormField label="Nombre" htmlFor="lp-name" error={errors.name?.message} required>
+            <Input id="lp-name" autoFocus error={!!errors.name} {...register('name')} />
+          </FormField>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <label htmlFor="prog-name" className="mb-1 block text-xs font-medium text-muted">Nombre del programa</label>
-              <input
-                id="prog-name"
-                type="text"
-                placeholder="Ej: Tarjeta de sellos"
-                {...register('name')}
-                className="h-9 w-full rounded-lg border border-rule bg-cream px-3 text-sm font-sans placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-              {errors.name && <p role="alert" className="mt-0.5 text-xs text-destructive">{errors.name.message}</p>}
-            </div>
-
-            <div>
-              <label htmlFor="prog-stamps" className="mb-1 block text-xs font-medium text-muted">
-                Sellos requeridos (5–12)
-              </label>
-              <input
-                id="prog-stamps"
+          <div className="grid grid-cols-2 gap-4">
+            <FormField
+              label="Sellos requeridos"
+              htmlFor="lp-stamps"
+              error={errors.stamps_required?.message}
+              required
+            >
+              <Input
+                id="lp-stamps"
                 type="number"
-                min={5}
-                max={12}
+                min="3"
+                max="20"
+                error={!!errors.stamps_required}
                 {...register('stamps_required', { valueAsNumber: true })}
-                className="h-9 w-full rounded-lg border border-rule bg-cream px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent"
               />
-              {errors.stamps_required && <p role="alert" className="mt-0.5 text-xs text-destructive">{errors.stamps_required.message}</p>}
-            </div>
+            </FormField>
 
-            <div>
-              <label htmlFor="prog-expiry" className="mb-1 block text-xs font-medium text-muted">
-                Expiración (días, 0 = sin expiración)
-              </label>
-              <input
-                id="prog-expiry"
-                type="number"
-                min={0}
-                {...register('expiration_days', { valueAsNumber: true })}
-                className="h-9 w-full rounded-lg border border-rule bg-cream px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="prog-reward-type" className="mb-1 block text-xs font-medium text-muted">Tipo de recompensa</label>
+            <FormField
+              label="Tipo de recompensa"
+              htmlFor="lp-type"
+              error={errors.reward_type?.message}
+            >
               <select
-                id="prog-reward-type"
+                id="lp-type"
+                className="w-full rounded border border-rule bg-paper px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent"
                 {...register('reward_type')}
-                className="h-9 w-full rounded-lg border border-rule bg-cream px-3 text-sm font-sans focus:outline-none focus:ring-2 focus:ring-accent"
               >
-                <option value="free_item">Producto gratis</option>
+                <option value="free_item">Platillo gratis</option>
                 <option value="discount">Descuento</option>
-                <option value="custom">Personalizado</option>
+                <option value="free_drink">Bebida gratis</option>
               </select>
-            </div>
-
-            <div>
-              <label htmlFor="prog-reward-value" className="mb-1 block text-xs font-medium text-muted">
-                {rewardType === 'discount' ? 'Porcentaje de descuento' : 'Descripción de la recompensa'}
-              </label>
-              <input
-                id="prog-reward-value"
-                type="text"
-                placeholder={rewardType === 'discount' ? '20%' : 'Café americano gratis'}
-                {...register('reward_value')}
-                className="h-9 w-full rounded-lg border border-rule bg-cream px-3 text-sm font-sans placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-              {errors.reward_value && <p role="alert" className="mt-0.5 text-xs text-destructive">{errors.reward_value.message}</p>}
-            </div>
+            </FormField>
           </div>
 
-          <div className="flex gap-2 pt-1">
-            <Button type="button" variant="outline" size="sm" onClick={() => { setShowForm(false); reset(); }}>
+          <FormField
+            label="Descripción de la recompensa"
+            htmlFor="lp-reward"
+            error={errors.reward_description?.message}
+            required
+          >
+            <Input
+              id="lp-reward"
+              placeholder="Ej. Postre gratis a elección"
+              error={!!errors.reward_description}
+              {...register('reward_description')}
+            />
+          </FormField>
+
+          <FormField
+            label="Expiración de sellos (días, opcional)"
+            htmlFor="lp-expiry"
+            error={errors.stamps_expiry_days?.message}
+            hint="Deja vacío para que nunca expiren"
+          >
+            <Input
+              id="lp-expiry"
+              type="number"
+              min="1"
+              {...register('stamps_expiry_days', { valueAsNumber: true })}
+            />
+          </FormField>
+
+          {errors.root && (
+            <p role="alert" className="rounded bg-red-50 px-3 py-2 text-sm text-red-600">
+              {errors.root.message}
+            </p>
+          )}
+
+          <div className="flex justify-end gap-3">
+            <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>
               Cancelar
             </Button>
-            <Button type="submit" size="sm" disabled={isPending}>
-              {isPending ? 'Creando...' : 'Crear programa'}
-            </Button>
+            <Button type="submit">Crear programa</Button>
           </div>
         </form>
       )}
 
       {/* Programs list */}
-      {programs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-rule py-20 text-center">
-          <Gift className="mb-3 h-8 w-8 text-muted" aria-hidden="true" />
-          <p className="font-display text-base font-medium text-ink">Sin programas de fidelidad</p>
-          <p className="mt-1 text-sm font-sans text-muted max-w-xs">
-            Crea un programa de sellos para premiar a tus clientes frecuentes.
-          </p>
-        </div>
+      {programs.length === 0 && !showCreate ? (
+        <p className="py-8 text-center text-sm text-muted">
+          No hay programas de fidelización creados.
+        </p>
       ) : (
-        <div className="space-y-3">
-          {programs.map((program) => {
-            const stats = analytics[program.id] ?? { total: 0, completed: 0 };
-            const completionRate = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
-
-            return (
-              <div
-                key={program.id}
-                className={cn(
-                  'rounded-xl border border-rule bg-card p-4',
-                  !program.is_active && 'opacity-60'
-                )}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-sans font-medium text-ink">{program.name}</p>
-                      <Badge variant={program.is_active ? 'available' : 'outline'} className="shrink-0">
-                        {program.is_active ? 'Activo' : 'Inactivo'}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 text-xs font-sans text-muted">
-                      {REWARD_TYPE_LABELS[program.reward_type]}: {program.reward_value}
-                    </p>
+        <div className="flex flex-col gap-3">
+          {programs.map((p) => (
+            <div key={p.id} className="rounded-xl border border-rule bg-paper px-5 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-ink">{p.name}</p>
+                    <Badge variant={p.is_active ? 'success' : 'muted'}>
+                      {p.is_active ? 'Activo' : 'Inactivo'}
+                    </Badge>
                   </div>
-
-                  {isAdmin && (
-                    <Switch
-                      checked={program.is_active}
-                      onCheckedChange={(v) => handleToggle(program.id, v)}
-                      aria-label={program.is_active ? 'Desactivar programa' : 'Activar programa'}
-                      disabled={isPending}
-                    />
+                  <p className="mt-1 text-xs text-muted">
+                    {p.stamps_required} sellos → {p.reward_description}
+                  </p>
+                  {p.stamps_expiry_days && (
+                    <p className="mt-0.5 text-xs text-muted">
+                      Sellos expiran en {p.stamps_expiry_days} días
+                    </p>
                   )}
                 </div>
-
-                {/* Stamp dots preview */}
-                <div className="mt-3">
-                  <StampDots count={0} required={program.stamps_required} />
-                  <p className="mt-1.5 text-xs font-mono text-muted">
-                    {program.stamps_required} sellos para completar
-                    {program.expiration_days ? ` · Expira en ${program.expiration_days} días` : ''}
-                  </p>
-                </div>
-
-                {/* Analytics */}
-                <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg border border-rule bg-cream p-3">
-                  <div className="text-center">
-                    <p className="font-display text-lg font-bold text-ink">{stats.total}</p>
-                    <p className="text-xs font-sans text-muted">Tarjetas</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="font-display text-lg font-bold text-accent">{stats.completed}</p>
-                    <p className="text-xs font-sans text-muted">Completadas</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="font-display text-lg font-bold text-ink">{completionRate}%</p>
-                    <p className="text-xs font-sans text-muted">Tasa</p>
-                  </div>
-                </div>
+                <Switch
+                  checked={p.is_active}
+                  onCheckedChange={(v) => handleToggle(p.id, v)}
+                  aria-label={`${p.is_active ? 'Desactivar' : 'Activar'} programa ${p.name}`}
+                />
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       )}
     </div>

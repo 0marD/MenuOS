@@ -1,53 +1,44 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { requireAdminSession } from '@/lib/auth/get-session';
 import { createClient } from '@/lib/supabase/server';
-import { loyaltyProgramSchema, type LoyaltyProgramInput } from '@menuos/shared/validations';
-import { requireOrgSession, requireAuthSession } from '@/lib/auth/get-session';
+import type { LoyaltyProgramInput } from '@menuos/shared';
 
-export async function createLoyaltyProgram(
-  orgId: string,
-  data: LoyaltyProgramInput
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const session = await requireOrgSession(orgId);
-    if (!['super_admin', 'manager'].includes(session.role)) {
-      return { success: false, error: 'Sin autorización' };
-    }
-  } catch {
-    return { success: false, error: 'Sin autorización' };
-  }
-
-  const parsed = loyaltyProgramSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: 'Datos inválidos' };
-
+export async function createLoyaltyProgram(data: LoyaltyProgramInput) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
+
+  // Deactivate existing programs first (one active at a time)
+  await supabase
+    .from('loyalty_programs')
+    .update({ is_active: false })
+    .eq('organization_id', org.id);
+
   const { error } = await supabase.from('loyalty_programs').insert({
-    organization_id: orgId,
-    name: parsed.data.name,
-    stamps_required: parsed.data.stamps_required,
-    reward_type: parsed.data.reward_type,
-    reward_value: parsed.data.reward_value,
-    expiration_days: parsed.data.expiration_days ?? null,
+    organization_id: org.id,
+    name: data.name,
+    stamps_required: data.stamps_required,
+    reward_description: data.reward_description,
+    reward_type: data.reward_type,
+    stamps_expiry_days: data.stamps_expiry_days ?? null,
+    is_active: true,
   });
 
-  if (error) return { success: false, error: 'No se pudo crear el programa' };
-
-  revalidatePath('/admin/loyalty');
-  return { success: true };
+  if (error) return { error: 'Error al crear el programa.' };
+  revalidatePath('/loyalty');
 }
 
-export async function toggleLoyaltyProgram(
-  id: string,
-  active: boolean
-): Promise<{ success: boolean }> {
-  try {
-    await requireAuthSession();
-  } catch {
-    return { success: false };
-  }
+export async function toggleLoyaltyProgram(id: string, isActive: boolean) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
-  await supabase.from('loyalty_programs').update({ is_active: active }).eq('id', id);
-  revalidatePath('/admin/loyalty');
-  return { success: true };
+
+  const { error } = await supabase
+    .from('loyalty_programs')
+    .update({ is_active: isActive })
+    .eq('id', id)
+    .eq('organization_id', org.id);
+
+  if (error) return { error: 'Error al cambiar estado del programa.' };
+  revalidatePath('/loyalty');
 }

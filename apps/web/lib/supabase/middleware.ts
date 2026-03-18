@@ -1,9 +1,24 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
+import type { CookieOptions } from '@supabase/ssr';
 import { type NextRequest, NextResponse } from 'next/server';
-import type { Database } from '@menuos/database/types';
+import type { Database } from '@menuos/database';
+
+const PUBLIC_ROUTES = ['/auth/login', '/auth/register', '/auth/forgot-password', '/auth/pin'];
+const PUBLIC_PREFIXES = ['/(public)', '/offline'];
+
+function isPublicRoute(pathname: string): boolean {
+  if (PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) return true;
+  if (PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return true;
+  // Public menu slugs: /[slug]
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.length >= 1 && !['auth', 'admin', 'waiter', 'kitchen', 'api'].includes(segments[0] ?? '')) {
+    return true;
+  }
+  return false;
+}
 
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+  let response = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,42 +28,27 @@ export async function updateSession(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet: Array<{ name: string; value: string; options: CookieOptions }>) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          supabaseResponse = NextResponse.next({ request });
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            response.cookies.set(name, value, options),
           );
         },
       },
-    }
+    },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
+  const { pathname } = request.nextUrl;
 
-  const pathname = request.nextUrl.pathname;
-  const isAuthRoute = pathname.startsWith('/auth');
-  const isAdminRoute = pathname.startsWith('/admin') || pathname.match(/^\/(admin)/) !== null;
-  const isWaiterRoute = pathname.startsWith('/waiter') || pathname.match(/^\/(waiter)/) !== null;
-  const isKitchenRoute = pathname.startsWith('/kitchen') || pathname.match(/^\/(kitchen)/) !== null;
-
-  const isProtectedRoute = isAdminRoute || isWaiterRoute || isKitchenRoute;
-
-  if (!user && isProtectedRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/auth/login';
-    return NextResponse.redirect(url);
+  if (!user && !isPublicRoute(pathname)) {
+    return NextResponse.redirect(new URL('/auth/login', request.url));
   }
 
-  if (user && isAuthRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/admin/dashboard';
-    return NextResponse.redirect(url);
+  if (user && pathname.startsWith('/auth/login')) {
+    return NextResponse.redirect(new URL('/(admin)/dashboard', request.url));
   }
 
-  return supabaseResponse;
+  return response;
 }

@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { createClient } from '@/lib/supabase/server';
+import { getMenuBySlug } from './actions';
 import { CustomerMenuView } from './components/CustomerMenuView';
-import { CustomerRegistrationSheet } from './components/CustomerRegistrationSheet';
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -11,83 +11,72 @@ interface PageProps {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const supabase = await createClient();
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('name')
-    .eq('slug', slug)
-    .is('deleted_at', null)
-    .single();
-
-  return {
-    title: org ? `${org.name} — Menú` : 'Menú',
-  };
+  const data = await getMenuBySlug(slug);
+  if (!data) return { title: 'Menú no encontrado' };
+  return { title: `${data.org.name} — Menú` };
 }
 
 export default async function PublicMenuPage({ params, searchParams }: PageProps) {
   const { slug } = await params;
-  const { table: tableToken } = await searchParams;
+  const { table: qrToken } = await searchParams;
 
-  const supabase = await createClient();
+  const data = await getMenuBySlug(slug);
+  if (!data) notFound();
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id, name, slug, logo_url, colors')
-    .eq('slug', slug)
-    .is('deleted_at', null)
-    .single();
+  const { org, categories } = data;
 
-  if (!org) notFound();
+  // Resolve table by QR token if present
+  let tableId: string | null = null;
+  let branchId: string | null = null;
 
-  // Get first active branch for this org (multi-branch: resolve by table token)
-  const { data: branch } = await supabase
-    .from('branches')
-    .select('id')
-    .eq('organization_id', org.id)
-    .eq('is_active', true)
-    .is('deleted_at', null)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .single();
-
-  // Resolve table info if QR token provided
-  let tableNumber: number | undefined;
-  if (tableToken) {
+  if (qrToken) {
+    const supabase = await createClient();
     const { data: table } = await supabase
       .from('restaurant_tables')
-      .select('number')
-      .eq('qr_token', tableToken)
+      .select('id, branch_id')
+      .eq('qr_token', qrToken)
+      .eq('organization_id', org.id)
       .eq('is_active', true)
       .single();
-    if (table) tableNumber = table.number;
+
+    if (table) {
+      tableId = table.id;
+      branchId = table.branch_id;
+    }
   }
 
-  const { data: categories } = await supabase
-    .from('menu_categories')
-    .select(`
-      id, name, icon, color, sort_order,
-      menu_items (
-        id, name, description, price, is_available, is_sold_out_today,
-        menu_item_photos ( url, position ),
-        menu_item_filters ( filter )
-      )
-    `)
-    .eq('organization_id', org.id)
-    .eq('is_visible', true)
-    .is('deleted_at', null)
-    .order('sort_order')
-    .order('sort_order', { referencedTable: 'menu_items' });
+  // Fall back to first active branch
+  if (!branchId) {
+    const supabase = await createClient();
+    const { data: branch } = await supabase
+      .from('branches')
+      .select('id')
+      .eq('organization_id', org.id)
+      .eq('is_active', true)
+      .order('created_at')
+      .limit(1)
+      .single();
+    branchId = branch?.id ?? null;
+  }
+
+  if (!branchId) notFound();
 
   return (
-    <>
-      <CustomerMenuView
-        org={org}
-        branchId={branch?.id ?? ''}
-        categories={categories ?? []}
-        {...(tableToken !== undefined ? { tableToken } : {})}
-        {...(tableNumber !== undefined ? { tableNumber } : {})}
-      />
-      <CustomerRegistrationSheet orgId={org.id} orgName={org.name} />
-    </>
+    <CustomerMenuView
+      org={{
+        id: org.id,
+        name: org.name,
+        slug: org.slug,
+        logo_url: org.logo_url,
+        banner_url: org.banner_url,
+        colors: {
+          primary_color: org.primary_color,
+          secondary_color: org.secondary_color,
+        },
+      }}
+      categories={categories}
+      branchId={branchId}
+      tableId={tableId}
+    />
   );
 }

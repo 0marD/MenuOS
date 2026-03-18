@@ -1,61 +1,52 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { requireAdminSession } from '@/lib/auth/get-session';
 import { createClient } from '@/lib/supabase/server';
-import { campaignSchema, type CampaignInput } from '@menuos/shared/validations';
-import { requireOrgSession, requireAuthSession } from '@/lib/auth/get-session';
+import type { CampaignInput } from '@menuos/shared';
 
-export async function createCampaign(
-  orgId: string,
-  data: CampaignInput
-): Promise<{ success: boolean; error?: string; id?: string }> {
-  try {
-    await requireOrgSession(orgId);
-  } catch {
-    return { success: false, error: 'Sin autorización' };
-  }
-
-  const parsed = campaignSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: 'Datos inválidos' };
-
+export async function createCampaign(data: CampaignInput) {
+  const { org, staffUser } = await requireAdminSession();
   const supabase = await createClient();
-  const status = parsed.data.scheduled_at ? 'scheduled' : 'draft';
 
-  const { data: campaign, error } = await supabase
-    .from('campaigns')
-    .insert({
-      organization_id: orgId,
-      name: parsed.data.name,
-      segment: parsed.data.segment ?? null,
-      status,
-      scheduled_at: parsed.data.scheduled_at ?? null,
-    })
-    .select('id')
-    .single();
+  const { error } = await supabase.from('campaigns').insert({
+    organization_id: org.id,
+    name: data.name,
+    template_name: data.template_name,
+    message_body: data.message_body ?? null,
+    segment: data.segment,
+    status: 'draft',
+    scheduled_at: data.scheduled_at ?? null,
+    created_by: staffUser.id,
+  });
 
-  if (error) return { success: false, error: 'No se pudo crear la campaña' };
-
-  revalidatePath('/admin/campaigns');
-  return { success: true, id: campaign.id };
+  if (error) return { error: 'Error al crear la campaña.' };
+  revalidatePath('/campaigns');
 }
 
-export async function deleteCampaign(
-  id: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    await requireAuthSession();
-  } catch {
-    return { success: false, error: 'Sin autorización' };
-  }
-
+export async function sendCampaign(id: string) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
+
+  const { error } = await supabase.functions.invoke('send-whatsapp', {
+    body: { campaign_id: id, organization_id: org.id },
+  });
+
+  if (error) return { error: 'Error al enviar la campaña. Verifica tu API key de WhatsApp.' };
+
+  revalidatePath('/campaigns');
+}
+
+export async function deleteCampaign(id: string) {
+  const { org } = await requireAdminSession();
+  const supabase = await createClient();
+
   const { error } = await supabase
     .from('campaigns')
-    .update({ deleted_at: new Date().toISOString() })
-    .eq('id', id);
+    .delete()
+    .eq('id', id)
+    .eq('organization_id', org.id);
 
-  if (error) return { success: false, error: error.message };
-
-  revalidatePath('/admin/campaigns');
-  return { success: true };
+  if (error) return { error: 'Error al eliminar la campaña.' };
+  revalidatePath('/campaigns');
 }

@@ -1,208 +1,278 @@
 'use client';
 
-import { useState, useMemo, useCallback, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
-import { Search, X } from 'lucide-react';
-import { cn } from '@menuos/ui';
-import { MenuItemCard } from '@menuos/ui/molecules/MenuItemCard';
-import { useMenuRealtime } from './useMenuRealtime';
-import { MenuUpdateToast } from './MenuUpdateToast';
+import { Search, ShoppingCart, User } from 'lucide-react';
+import Image from 'next/image';
+import { useCallback, useEffect, useState } from 'react';
+import { MenuItemCard } from '@menuos/ui';
+import { formatMXN } from '@menuos/shared';
+import { CustomerLayout } from '@menuos/ui';
+import type { Tables } from '@menuos/database';
 import { useCartStore } from '../cart/CartStore';
 import { CartSheet } from '../cart/CartSheet';
+import { CustomerRegistrationSheet } from './CustomerRegistrationSheet';
+import { MenuUpdateToast } from './MenuUpdateToast';
+import { useMenuRealtime } from './useMenuRealtime';
 
-interface MenuItemPhoto { url: string; position: number }
-interface MenuItemFilter { filter: string }
-interface MenuItem {
-  id: string;
-  name: string;
-  description: string | null;
-  price: number;
-  is_available: boolean;
-  is_sold_out_today: boolean;
-  menu_item_photos: MenuItemPhoto[];
-  menu_item_filters: MenuItemFilter[];
+type Category = Tables<'menu_categories'> & { menu_items: Tables<'menu_items'>[] };
+
+export interface OrgColors {
+  primary_color: string | null;
+  secondary_color: string | null;
 }
-interface Category {
-  id: string;
-  name: string;
-  icon: string | null;
-  color: string | null;
-  sort_order: number;
-  menu_items: MenuItem[];
-}
+
 interface Org {
   id: string;
   name: string;
   slug: string;
   logo_url: string | null;
-  colors: unknown;
+  banner_url: string | null;
+  colors: OrgColors;
 }
 
 interface CustomerMenuViewProps {
   org: Org;
-  branchId: string;
   categories: Category[];
-  tableToken?: string;
-  tableNumber?: number;
+  branchId: string;
+  tableId: string | null;
 }
 
-export function CustomerMenuView({ org, branchId, categories, tableToken, tableNumber }: CustomerMenuViewProps) {
-  const router = useRouter();
-  const [, startTransition] = useTransition();
-  const [activeCategory, setActiveCategory] = useState<string | null>(
-    categories[0]?.id ?? null
-  );
-  const [searchQuery, setSearchQuery] = useState('');
-  const [hasUpdate, setHasUpdate] = useState(false);
-  const { addItem } = useCartStore();
+type DietaryFilter = 'vegetarian' | 'gluten_free' | 'spicy';
 
-  const handleMenuUpdate = useCallback(() => {
-    setHasUpdate(true);
-  }, []);
+const DIETARY_FILTERS: { key: DietaryFilter; label: string; emoji: string }[] = [
+  { key: 'vegetarian', label: 'Vegetariano', emoji: '🥦' },
+  { key: 'gluten_free', label: 'Sin gluten', emoji: '🌾' },
+  { key: 'spicy', label: 'Picante', emoji: '🌶️' },
+];
 
-  const handleRefresh = useCallback(() => {
-    setHasUpdate(false);
-    startTransition(() => router.refresh());
-  }, [router]);
+export function CustomerMenuView({ org, categories, branchId, tableId }: CustomerMenuViewProps) {
+  const [search, setSearch] = useState('');
+  const [activeCat, setActiveCat] = useState<string | null>(categories[0]?.id ?? null);
+  const [activeFilters, setActiveFilters] = useState<Set<DietaryFilter>>(new Set());
+  const [showCart, setShowCart] = useState(false);
+  const [showReg, setShowReg] = useState(false);
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [menuUpdated, setMenuUpdated] = useState(false);
 
+  function toggleFilter(filter: DietaryFilter) {
+    setActiveFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(filter)) next.delete(filter);
+      else next.add(filter);
+      return next;
+    });
+  }
+
+  const { items, addItem, setContext, total } = useCartStore();
+  const cartCount = items.reduce((s, i) => s + i.quantity, 0);
+  const cartTotal = total();
+
+  useEffect(() => {
+    setContext(org.slug, tableId);
+  }, [org.slug, tableId, setContext]);
+
+  const handleMenuUpdate = useCallback(() => setMenuUpdated(true), []);
   useMenuRealtime(org.id, handleMenuUpdate);
 
-  const filteredCategories = useMemo(() => {
-    if (!searchQuery.trim()) return categories;
-    const q = searchQuery.toLowerCase();
-    return categories
-      .map((cat) => ({
-        ...cat,
-        menu_items: cat.menu_items.filter(
-          (item) =>
-            item.name.toLowerCase().includes(q) ||
-            item.description?.toLowerCase().includes(q)
-        ),
-      }))
-      .filter((cat) => cat.menu_items.length > 0);
-  }, [categories, searchQuery]);
+  const filteredCategories = categories
+    .map((cat) => ({
+      ...cat,
+      menu_items: cat.menu_items.filter((item) => {
+        if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false;
+        if (activeFilters.has('vegetarian') && !item.is_vegetarian) return false;
+        if (activeFilters.has('gluten_free') && !item.is_gluten_free) return false;
+        if (activeFilters.has('spicy') && !item.is_spicy) return false;
+        return true;
+      }),
+    }))
+    .filter((cat) => cat.menu_items.length > 0);
 
-  const isSearching = searchQuery.trim().length > 0;
+  const visibleCategories = filteredCategories.filter(
+    (cat) => cat.is_visible && cat.menu_items.length > 0,
+  );
 
   return (
-    <div className="flex min-h-screen flex-col bg-paper">
-      {/* Header */}
-      <header className="sticky top-0 z-30 border-b border-rule bg-paper/95 backdrop-blur-sm">
-        <div className="mx-auto max-w-2xl px-4">
-          <div className="flex h-14 items-center gap-3">
-            {org.logo_url && (
-              <img
-                src={org.logo_url}
-                alt={`${org.name} logo`}
-                className="h-8 w-8 rounded-full object-contain"
-              />
-            )}
-            <h1 className="font-display text-lg font-bold text-ink">{org.name}</h1>
+    <CustomerLayout
+      {...(org.colors.primary_color ? { primaryColor: org.colors.primary_color } : {})}
+      header={
+        <div className="px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {org.logo_url && (
+                <div className="relative h-8 w-8 overflow-hidden rounded">
+                  <Image src={org.logo_url} alt={org.name} fill className="object-contain" unoptimized />
+                </div>
+              )}
+              <span className="font-display text-base font-semibold text-ink">{org.name}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowReg(true)}
+                className="rounded-full p-2 text-muted hover:bg-cream hover:text-ink"
+                aria-label="Mi perfil"
+              >
+                <User className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           {/* Search */}
-          <div className="relative pb-3">
-            <Search
-              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
-              aria-hidden="true"
-            />
+          <div className="relative mt-3">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <input
               type="search"
-              placeholder="Buscar en el menú..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-9 w-full rounded-full border border-rule bg-cream pl-9 pr-9 text-sm font-sans placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
-              aria-label="Buscar platillos"
+              placeholder="Buscar platillos…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-full border border-rule bg-cream py-2 pl-9 pr-4 text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent"
             />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted"
-                aria-label="Limpiar búsqueda"
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            )}
           </div>
 
-          {/* Category Nav */}
-          {!isSearching && (
-            <nav
-              aria-label="Categorías del menú"
-              className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-3"
-            >
+          {/* Category tabs */}
+          {!search && (
+            <div className="scrollbar-hide -mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-1">
               {categories.map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => {
-                    setActiveCategory(cat.id);
+                    setActiveCat(cat.id);
                     document.getElementById(`cat-${cat.id}`)?.scrollIntoView({ behavior: 'smooth' });
                   }}
-                  className={cn(
-                    'flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-sans font-medium transition-colors',
-                    activeCategory === cat.id
-                      ? 'border-accent bg-accent text-accent-foreground'
-                      : 'border-rule bg-cream text-foreground hover:bg-paper'
-                  )}
-                  aria-current={activeCategory === cat.id ? 'true' : undefined}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                    activeCat === cat.id
+                      ? 'bg-accent text-white'
+                      : 'bg-cream text-muted hover:bg-rule hover:text-ink'
+                  }`}
+                  style={activeCat === cat.id ? { backgroundColor: org.colors.primary_color ?? undefined } : undefined}
                 >
-                  {cat.icon && <span aria-hidden="true">{cat.icon}</span>}
+                  {cat.icon && <span className="mr-1">{cat.icon}</span>}
                   {cat.name}
                 </button>
               ))}
-            </nav>
+            </div>
           )}
-        </div>
-      </header>
 
-      {/* Menu Content */}
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 pb-20">
-        {filteredCategories.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-sm font-sans text-muted">Sin resultados para &quot;{searchQuery}&quot;</p>
+          {/* Dietary filters */}
+          <div className="scrollbar-hide -mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-1">
+            {DIETARY_FILTERS.map(({ key, label, emoji }) => {
+              const active = activeFilters.has(key);
+              return (
+                <button
+                  key={key}
+                  onClick={() => toggleFilter(key)}
+                  className={`shrink-0 flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                    active
+                      ? 'border-accent bg-accent/10 text-accent'
+                      : 'border-rule bg-paper text-muted hover:border-accent/50'
+                  }`}
+                  aria-pressed={active}
+                  aria-label={`Filtrar por ${label}`}
+                >
+                  <span aria-hidden>{emoji}</span>
+                  {label}
+                </button>
+              );
+            })}
           </div>
+        </div>
+      }
+    >
+      {/* Banner */}
+      {org.banner_url && !search && (
+        <div className="relative h-40 w-full">
+          <Image src={org.banner_url} alt={`${org.name} banner`} fill className="object-cover" unoptimized />
+        </div>
+      )}
+
+      {/* Menu */}
+      <div className="px-4 pb-32">
+        {visibleCategories.length === 0 ? (
+          <p className="py-16 text-center text-sm text-muted">No se encontraron platillos.</p>
         ) : (
-          filteredCategories.map((category) => (
-            <section
-              key={category.id}
-              id={`cat-${category.id}`}
-              aria-labelledby={`cat-title-${category.id}`}
-              className="pt-6"
-            >
-              <h2
-                id={`cat-title-${category.id}`}
-                className="mb-3 flex items-center gap-2 font-display text-xl font-bold text-ink"
-              >
-                {category.icon && <span aria-hidden="true">{category.icon}</span>}
-                {category.name}
+          visibleCategories.map((cat) => (
+            <section key={cat.id} id={`cat-${cat.id}`} className="mb-8 scroll-mt-44">
+              <h2 className="mb-3 font-display text-lg font-bold text-ink">
+                {cat.icon && <span className="mr-2">{cat.icon}</span>}
+                {cat.name}
               </h2>
-              <div className="flex flex-col gap-2">
-                {category.menu_items.map((item) => (
+              <div className="flex flex-col gap-3">
+                {cat.menu_items.map((item) => (
                   <MenuItemCard
                     key={item.id}
                     name={item.name}
-                    {...(item.description !== null ? { description: item.description } : {})}
-                    price={Number(item.price)}
-                    {...(item.menu_item_photos[0]?.url ? { imageUrl: item.menu_item_photos[0].url } : {})}
+                    description={item.description}
+                    price={formatMXN(item.base_price)}
+                    photoUrl={item.photo_url}
+                    isAvailable={item.is_available}
                     isSoldOut={item.is_sold_out_today}
-                    filters={item.menu_item_filters.map((f) => f.filter)}
-                    {...(!item.is_sold_out_today ? { onSelect: () => addItem({ id: item.id, name: item.name, price: Number(item.price) }) } : {})}
+                    isSpecial={item.is_special}
+                    isVegetarian={item.is_vegetarian}
+                    isGlutenFree={item.is_gluten_free}
+                    isSpicy={item.is_spicy}
+                    preparationTime={item.preparation_time_minutes}
+                    {...(item.is_available && !item.is_sold_out_today
+                      ? { onClick: () => addItem({ id: item.id, name: item.name, price: item.base_price }) }
+                      : {})}
                   />
                 ))}
               </div>
             </section>
           ))
         )}
-      </main>
+      </div>
 
-      <MenuUpdateToast visible={hasUpdate} onRefresh={handleRefresh} />
-      <CartSheet
-        slug={org.slug}
-        orgId={org.id}
-        branchId={branchId}
-        {...(tableToken !== undefined ? { tableToken } : {})}
-        {...(tableNumber !== undefined ? { tableNumber } : {})}
-      />
-    </div>
+      {/* Cart FAB */}
+      {cartCount > 0 && (
+        <button
+          onClick={() => setShowCart(true)}
+          className="fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full px-6 py-3 shadow-xl"
+          style={{ backgroundColor: org.colors.primary_color ?? '#D4500A', color: '#fff' }}
+          aria-label={`Ver carrito — ${cartCount} artículos`}
+        >
+          <ShoppingCart className="h-5 w-5" />
+          <span className="font-medium">{cartCount} artículo{cartCount !== 1 ? 's' : ''}</span>
+          <span className="font-display font-bold">{formatMXN(cartTotal)}</span>
+        </button>
+      )}
+
+      {/* Order confirmed */}
+      {orderId && (
+        <div
+          role="status"
+          className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-rule bg-paper px-6 py-4 shadow-xl text-center"
+        >
+          <p className="font-display text-lg font-bold text-ink">¡Pedido enviado!</p>
+          <p className="mt-1 text-sm text-muted">El restaurante ya está preparando tu orden.</p>
+          <button
+            onClick={() => setOrderId(null)}
+            className="mt-3 text-xs text-accent underline"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
+
+      {showCart && (
+        <CartSheet
+          orgId={org.id}
+          branchId={branchId}
+          customerId={customerId}
+          onClose={() => setShowCart(false)}
+          onOrderPlaced={(id) => { setShowCart(false); setOrderId(id); }}
+          onNeedsRegistration={() => { setShowCart(false); setShowReg(true); }}
+        />
+      )}
+
+      {showReg && (
+        <CustomerRegistrationSheet
+          orgId={org.id}
+          orgName={org.name}
+          onSuccess={(id) => { setCustomerId(id); setShowReg(false); }}
+          onClose={() => setShowReg(false)}
+        />
+      )}
+
+      <MenuUpdateToast show={menuUpdated} onDismiss={() => setMenuUpdated(false)} />
+    </CustomerLayout>
   );
 }

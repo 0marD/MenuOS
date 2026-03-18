@@ -2,72 +2,74 @@ import * as React from 'react';
 import { cn } from '../lib/utils';
 
 interface StampCardProps {
-  totalStamps: number;
-  earnedStamps: number;
+  stampsEarned: number;
+  stampsRequired: number;
   rewardDescription: string;
-  restaurantName?: string;
+  programName: string;
+  expiresAt?: string | null;
   className?: string;
 }
 
-function StampCard({
-  totalStamps,
-  earnedStamps,
+export function StampCard({
+  stampsEarned,
+  stampsRequired,
   rewardDescription,
-  restaurantName,
+  programName,
+  expiresAt,
   className,
 }: StampCardProps) {
-  const progress = Math.min(earnedStamps / totalStamps, 1);
-  const remaining = Math.max(totalStamps - earnedStamps, 0);
+  const progress = Math.min(stampsEarned / stampsRequired, 1);
+  const remaining = Math.max(stampsRequired - stampsEarned, 0);
 
   return (
     <div
       className={cn(
-        'rounded-xl border border-rule bg-card p-5 shadow-sm',
-        className
+        'rounded border border-rule bg-paper p-5 shadow-sm',
+        className,
       )}
-      role="region"
-      aria-label="Tarjeta de sellos de fidelidad"
     >
-      {restaurantName && (
-        <p className="mb-3 text-xs font-mono uppercase tracking-wider text-muted">
-          {restaurantName}
-        </p>
-      )}
-      <div
-        className="mb-4 grid gap-2"
-        style={{ gridTemplateColumns: `repeat(${totalStamps}, 1fr)` }}
-        aria-label={`${earnedStamps} de ${totalStamps} sellos`}
-      >
-        {Array.from({ length: totalStamps }).map((_, i) => (
+      <div className="mb-4 flex items-start justify-between">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted">Programa</p>
+          <h3 className="font-display text-lg font-bold text-ink">{programName}</h3>
+        </div>
+        <div className="text-right">
+          <span className="font-display text-3xl font-black text-accent">{stampsEarned}</span>
+          <span className="font-mono text-sm text-muted">/{stampsRequired}</span>
+        </div>
+      </div>
+
+      <div className="mb-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(stampsRequired, 10)}, 1fr)` }}>
+        {Array.from({ length: stampsRequired }).map((_, i) => (
           <div
             key={i}
             className={cn(
-              'aspect-square rounded-full border-2 transition-all',
-              i < earnedStamps
+              'aspect-square rounded-full border-2 transition-colors',
+              i < stampsEarned
                 ? 'border-accent bg-accent'
-                : 'border-rule bg-background'
+                : 'border-rule bg-cream',
             )}
-            aria-label={i < earnedStamps ? 'Sello obtenido' : 'Sello pendiente'}
+            aria-label={i < stampsEarned ? 'Sello obtenido' : 'Sello pendiente'}
           />
         ))}
       </div>
-      <div className="mb-1 h-1.5 w-full overflow-hidden rounded-full bg-rule">
+
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-cream">
         <div
-          className="h-full rounded-full bg-accent transition-all duration-500"
+          className="h-full bg-accent transition-all duration-500"
           style={{ width: `${progress * 100}%` }}
-          role="progressbar"
-          aria-valuenow={earnedStamps}
-          aria-valuemin={0}
-          aria-valuemax={totalStamps}
         />
       </div>
-      <p className="mt-2 text-xs font-sans text-muted">
+
+      <p className="mt-3 text-sm text-ink">
         {remaining > 0
-          ? `${remaining} sello${remaining !== 1 ? 's' : ''} para: ${rewardDescription}`
-          : `\u00a1Listo para canjear: ${rewardDescription}!`}
+          ? `Te faltan ${remaining} ${remaining === 1 ? 'sello' : 'sellos'} para: ${rewardDescription}`
+          : `¡Recompensa desbloqueada! ${rewardDescription}`}
       </p>
+
+      {expiresAt && (
+        <p className="mt-1 font-mono text-[10px] text-muted">Expira: {expiresAt}</p>
+      )}
     </div>
   );
 }
-
-export { StampCard };

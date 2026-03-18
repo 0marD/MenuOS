@@ -1,194 +1,249 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { requireAdminSession } from '@/lib/auth/get-session';
 import { createClient } from '@/lib/supabase/server';
-import { menuCategorySchema, menuItemSchema, type MenuCategoryInput, type MenuItemInput } from '@menuos/shared/validations';
-import type { Tables, TablesInsert, TablesUpdate } from '@menuos/database/types';
+import type { CategoryInput, MenuItemInput } from '@menuos/shared';
 
-export async function createCategory(data: MenuCategoryInput): Promise<{ data?: Tables<'menu_categories'>; error?: string }> {
-  const parsed = menuCategorySchema.safeParse(data);
-  if (!parsed.success) return { error: 'Datos inválidos' };
+const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif']);
+const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 
+export async function uploadMenuItemPhoto(formData: FormData) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'No autorizado' };
 
-  const { data: orgData } = await supabase
-    .from('staff_users')
-    .select('organization_id')
-    .eq('auth_user_id', user.id)
-    .single();
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) return { error: 'Archivo inválido.' };
+  if (!ALLOWED_MIME.has(file.type)) return { error: 'Solo se permiten imágenes (JPG, PNG, WebP, GIF, AVIF).' };
+  if (file.size > MAX_BYTES) return { error: 'La imagen no puede superar 5 MB.' };
 
-  if (!orgData) return { error: 'Organización no encontrada' };
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
+  const path = `${org.id}/${crypto.randomUUID()}.${ext}`;
 
-  const insert: TablesInsert<'menu_categories'> = {
-    organization_id: orgData.organization_id,
-    name: parsed.data.name,
-    icon: parsed.data.icon ?? null,
-    color: parsed.data.color ?? null,
-    sort_order: parsed.data.sort_order,
-    is_visible: parsed.data.is_visible,
-  };
+  const { error } = await supabase.storage
+    .from('menu-photos')
+    .upload(path, file, { contentType: file.type, upsert: false });
 
-  const { data: category, error } = await supabase
-    .from('menu_categories')
-    .insert(insert)
-    .select()
-    .single();
+  if (error) return { error: 'Error al subir la imagen. Verifica que el bucket "menu-photos" existe.' };
 
-  if (error) return { error: error.message };
+  const { data: { publicUrl } } = supabase.storage.from('menu-photos').getPublicUrl(path);
 
-  revalidatePath('/admin/menu');
-  return { data: category };
+  return { url: publicUrl };
 }
 
-export async function updateCategory(id: string, data: MenuCategoryInput): Promise<{ data?: Tables<'menu_categories'>; error?: string }> {
-  const parsed = menuCategorySchema.safeParse(data);
-  if (!parsed.success) return { error: 'Datos inválidos' };
+// ============================================================
+// CATEGORIES
+// ============================================================
 
-  const update: TablesUpdate<'menu_categories'> = {
-    name: parsed.data.name,
-    icon: parsed.data.icon ?? null,
-    color: parsed.data.color ?? null,
-    sort_order: parsed.data.sort_order,
-    is_visible: parsed.data.is_visible,
-  };
-
+export async function createCategory(data: CategoryInput) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
-  const { data: category, error } = await supabase
+
+  const { count } = await supabase
     .from('menu_categories')
-    .update(update)
+    .select('*', { count: 'exact', head: true })
+    .eq('organization_id', org.id)
+    .is('deleted_at', null);
+
+  const { error } = await supabase.from('menu_categories').insert({
+    organization_id: org.id,
+    name: data.name,
+    icon: data.icon ?? null,
+    color: data.color ?? null,
+    is_visible: data.is_visible,
+    sort_order: count ?? 0,
+  });
+
+  if (error) return { error: 'Error al crear la categoría.' };
+
+  revalidatePath('/menu');
+}
+
+export async function updateCategory(id: string, data: Partial<CategoryInput>) {
+  const { org } = await requireAdminSession();
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from('menu_categories')
+    .update({
+      ...(data.name !== undefined ? { name: data.name } : {}),
+      icon: data.icon ?? null,
+      color: data.color ?? null,
+      ...(data.is_visible !== undefined ? { is_visible: data.is_visible } : {}),
+    })
     .eq('id', id)
-    .select()
-    .single();
+    .eq('organization_id', org.id);
 
-  if (error) return { error: error.message };
+  if (error) return { error: 'Error al actualizar la categoría.' };
 
-  revalidatePath('/admin/menu');
-  return { data: category };
+  revalidatePath('/menu');
 }
 
-export async function toggleCategoryVisibility(id: string, isVisible: boolean): Promise<void> {
+export async function deleteCategory(id: string) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
-  await supabase
+
+  const { error } = await supabase
+    .from('menu_categories')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('organization_id', org.id);
+
+  if (error) return { error: 'Error al eliminar la categoría.' };
+
+  revalidatePath('/menu');
+}
+
+export async function toggleCategoryVisibility(id: string, isVisible: boolean) {
+  const { org } = await requireAdminSession();
+  const supabase = await createClient();
+
+  const { error } = await supabase
     .from('menu_categories')
     .update({ is_visible: isVisible })
-    .eq('id', id);
-
-  revalidatePath('/admin/menu');
-}
-
-export async function deleteCategory(id: string): Promise<void> {
-  const supabase = await createClient();
-  await supabase
-    .from('menu_categories')
-    .update({ deleted_at: new Date().toISOString() })
-    .eq('id', id);
-
-  revalidatePath('/admin/menu');
-}
-
-export async function createItem(categoryId: string, data: MenuItemInput): Promise<{ data?: Tables<'menu_items'>; error?: string }> {
-  const parsed = menuItemSchema.safeParse(data);
-  if (!parsed.success) return { error: 'Datos inválidos' };
-
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'No autorizado' };
-
-  const { data: orgData } = await supabase
-    .from('staff_users')
-    .select('organization_id')
-    .eq('auth_user_id', user.id)
-    .single();
-
-  if (!orgData) return { error: 'Organización no encontrada' };
-
-  const { filters, ...formData } = parsed.data;
-
-  const insert: TablesInsert<'menu_items'> = {
-    organization_id: orgData.organization_id,
-    category_id: categoryId,
-    name: formData.name,
-    description: formData.description ?? null,
-    price: formData.price,
-    is_available: formData.is_available,
-    is_sold_out_today: formData.is_sold_out_today,
-    prep_time: formData.prep_time ?? null,
-  };
-
-  const { data: item, error } = await supabase
-    .from('menu_items')
-    .insert(insert)
-    .select()
-    .single();
-
-  if (error) return { error: error.message };
-
-  if (filters.length > 0) {
-    await supabase.from('menu_item_filters').insert(
-      filters.map((filter) => ({ menu_item_id: item.id, filter }))
-    );
-  }
-
-  revalidatePath('/admin/menu');
-  return { data: item };
-}
-
-export async function updateItem(id: string, data: MenuItemInput): Promise<{ data?: Tables<'menu_items'>; error?: string }> {
-  const parsed = menuItemSchema.safeParse(data);
-  if (!parsed.success) return { error: 'Datos inválidos' };
-
-  const { filters, ...formData } = parsed.data;
-
-  const update: TablesUpdate<'menu_items'> = {
-    name: formData.name,
-    description: formData.description ?? null,
-    price: formData.price,
-    is_available: formData.is_available,
-    is_sold_out_today: formData.is_sold_out_today,
-    prep_time: formData.prep_time ?? null,
-  };
-
-  const supabase = await createClient();
-
-  const { data: item, error } = await supabase
-    .from('menu_items')
-    .update(update)
     .eq('id', id)
-    .select()
-    .single();
+    .eq('organization_id', org.id);
 
-  if (error) return { error: error.message };
+  if (error) return { error: 'Error al cambiar visibilidad.' };
 
-  // Update filters: delete all then reinsert
-  await supabase.from('menu_item_filters').delete().eq('menu_item_id', id);
-  if (filters.length > 0) {
-    await supabase.from('menu_item_filters').insert(
-      filters.map((filter) => ({ menu_item_id: id, filter }))
-    );
-  }
-
-  revalidatePath('/admin/menu');
-  return { data: item };
+  revalidatePath('/menu');
 }
 
-export async function toggleItemSoldOut(id: string, isSoldOut: boolean): Promise<void> {
+export async function reorderCategories(orderedIds: string[]) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
-  await supabase
+
+  const updates = orderedIds.map((id, index) =>
+    supabase
+      .from('menu_categories')
+      .update({ sort_order: index })
+      .eq('id', id)
+      .eq('organization_id', org.id),
+  );
+
+  await Promise.all(updates);
+  revalidatePath('/menu');
+}
+
+// ============================================================
+// MENU ITEMS
+// ============================================================
+
+export async function createMenuItem(data: MenuItemInput) {
+  const { org } = await requireAdminSession();
+  const supabase = await createClient();
+
+  const { count } = await supabase
+    .from('menu_items')
+    .select('*', { count: 'exact', head: true })
+    .eq('category_id', data.category_id)
+    .is('deleted_at', null);
+
+  const { error } = await supabase.from('menu_items').insert({
+    organization_id: org.id,
+    category_id: data.category_id,
+    name: data.name,
+    description: data.description ?? null,
+    base_price: data.base_price,
+    photo_url: data.photo_url || null,
+    is_available: data.is_available,
+    is_special: data.is_special,
+    is_vegetarian: data.is_vegetarian ?? false,
+    is_gluten_free: data.is_gluten_free ?? false,
+    is_spicy: data.is_spicy ?? false,
+    preparation_time_minutes: data.preparation_time_minutes ?? null,
+    sort_order: count ?? 0,
+  });
+
+  if (error) return { error: 'Error al crear el platillo.' };
+
+  revalidatePath('/menu');
+}
+
+export async function updateMenuItem(id: string, data: Partial<MenuItemInput>) {
+  const { org } = await requireAdminSession();
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from('menu_items')
+    .update({
+      ...(data.name !== undefined ? { name: data.name } : {}),
+      description: data.description ?? null,
+      photo_url: data.photo_url || null,
+      ...(data.base_price !== undefined ? { base_price: data.base_price } : {}),
+      ...(data.category_id !== undefined ? { category_id: data.category_id } : {}),
+      ...(data.is_available !== undefined ? { is_available: data.is_available } : {}),
+      ...(data.is_special !== undefined ? { is_special: data.is_special } : {}),
+      ...(data.is_vegetarian !== undefined ? { is_vegetarian: data.is_vegetarian } : {}),
+      ...(data.is_gluten_free !== undefined ? { is_gluten_free: data.is_gluten_free } : {}),
+      ...(data.is_spicy !== undefined ? { is_spicy: data.is_spicy } : {}),
+      preparation_time_minutes: data.preparation_time_minutes ?? null,
+    })
+    .eq('id', id)
+    .eq('organization_id', org.id);
+
+  if (error) return { error: 'Error al actualizar el platillo.' };
+
+  revalidatePath('/menu');
+}
+
+export async function deleteMenuItem(id: string) {
+  const { org } = await requireAdminSession();
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from('menu_items')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('organization_id', org.id);
+
+  if (error) return { error: 'Error al eliminar el platillo.' };
+
+  revalidatePath('/menu');
+}
+
+export async function toggleMenuItemAvailable(id: string, isAvailable: boolean) {
+  const { org } = await requireAdminSession();
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from('menu_items')
+    .update({ is_available: isAvailable })
+    .eq('id', id)
+    .eq('organization_id', org.id);
+
+  if (error) return { error: 'Error al cambiar disponibilidad.' };
+
+  revalidatePath('/menu');
+}
+
+export async function toggleMenuItemSoldOut(id: string, isSoldOut: boolean) {
+  const { org } = await requireAdminSession();
+  const supabase = await createClient();
+
+  const { error } = await supabase
     .from('menu_items')
     .update({ is_sold_out_today: isSoldOut })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('organization_id', org.id);
 
-  revalidatePath('/admin/menu');
+  if (error) return { error: 'Error al cambiar estado.' };
+
+  revalidatePath('/menu');
 }
 
-export async function deleteItem(id: string): Promise<void> {
+export async function reorderMenuItems(orderedIds: string[]) {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
-  await supabase
-    .from('menu_items')
-    .update({ deleted_at: new Date().toISOString() })
-    .eq('id', id);
 
-  revalidatePath('/admin/menu');
+  const updates = orderedIds.map((id, index) =>
+    supabase
+      .from('menu_items')
+      .update({ sort_order: index })
+      .eq('id', id)
+      .eq('organization_id', org.id),
+  );
+
+  await Promise.all(updates);
+  revalidatePath('/menu');
 }

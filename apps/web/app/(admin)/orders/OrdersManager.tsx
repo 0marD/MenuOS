@@ -1,143 +1,138 @@
 'use client';
 
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
-import { Badge } from '@menuos/ui/atoms/Badge';
-import { cn } from '@menuos/ui';
+import { Badge } from '@menuos/ui';
+import { formatMXN, formatRelativeDate } from '@menuos/shared';
+import type { Tables } from '@menuos/database';
 
-interface OrderItem {
-  id: string;
-  name: string;
-  price: number;
-  quantity: number;
-}
+type Order = Tables<'orders'> & {
+  order_items: Tables<'order_items'>[];
+};
 
-interface Order {
-  id: string;
-  table_number: number | null;
-  status: string;
-  total: number;
-  round: number;
-  created_at: string;
-  customer_name: string | null;
-  order_items: OrderItem[];
-}
+const STATUS_VARIANT: Record<string, 'default' | 'info' | 'warning' | 'success' | 'muted' | 'destructive'> = {
+  pending: 'warning',
+  confirmed: 'info',
+  preparing: 'default',
+  ready: 'success',
+  delivered: 'muted',
+  cancelled: 'destructive',
+} as const;
+
+const STATUS_LABEL: Record<string, string> = {
+  pending: 'Pendiente',
+  confirmed: 'Confirmado',
+  preparing: 'Preparando',
+  ready: 'Listo',
+  delivered: 'Entregado',
+  cancelled: 'Cancelado',
+};
+
+const FILTER_OPTIONS = ['all', 'pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'];
 
 interface OrdersManagerProps {
   orders: Order[];
-  orgId: string;
-}
-
-const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' | 'highlight' | 'available' }> = {
-  pending:   { label: 'Pendiente',  variant: 'highlight' },
-  confirmed: { label: 'Confirmado', variant: 'secondary' },
-  preparing: { label: 'En cocina',  variant: 'secondary' },
-  ready:     { label: 'Listo',      variant: 'available' },
-  delivered: { label: 'Entregado',  variant: 'default' },
-  cancelled: { label: 'Cancelado',  variant: 'destructive' },
-};
-
-const STATUS_FILTERS = [
-  { value: 'all', label: 'Todos' },
-  { value: 'pending', label: 'Pendientes' },
-  { value: 'preparing', label: 'En cocina' },
-  { value: 'ready', label: 'Listos' },
-  { value: 'delivered', label: 'Entregados' },
-  { value: 'cancelled', label: 'Cancelados' },
-] as const;
-
-function formatTime(iso: string) {
-  return new Intl.DateTimeFormat('es-MX', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 }
 
 export function OrdersManager({ orders }: OrdersManagerProps) {
-  const [filter, setFilter] = useState<string>('all');
+  const [filter, setFilter] = useState('all');
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const filtered = filter === 'all' ? orders : orders.filter((o) => o.status === filter);
 
+  const totalRevenue = orders
+    .filter((o) => o.status === 'delivered')
+    .reduce((s, o) => s + o.total_amount, 0);
+
+  const activeCount = orders.filter((o) =>
+    ['pending', 'confirmed', 'preparing'].includes(o.status),
+  ).length;
+
   return (
-    <div className="space-y-4">
-      {/* Filter tabs */}
-      <div role="tablist" aria-label="Filtrar pedidos" className="flex gap-1 overflow-x-auto rounded-lg border border-rule bg-cream p-1">
-        {STATUS_FILTERS.map(({ value, label }) => {
-          const count = value === 'all' ? orders.length : orders.filter((o) => o.status === value).length;
-          return (
-            <button
-              key={value}
-              role="tab"
-              aria-selected={filter === value}
-              onClick={() => setFilter(value)}
-              className={cn(
-                'flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-sans transition-colors',
-                filter === value ? 'bg-paper font-medium text-ink shadow-sm' : 'text-muted hover:text-ink'
-              )}
-            >
-              {label}
-              {count > 0 && (
-                <span className={cn(
-                  'rounded-full px-1.5 py-0.5 text-[10px] font-mono',
-                  filter === value ? 'bg-accent text-white' : 'bg-rule text-muted'
-                )}>
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
+    <div className="flex flex-col gap-4">
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'Total pedidos', value: orders.length },
+          { label: 'Activos', value: activeCount },
+          { label: 'Ingresos entregados', value: formatMXN(totalRevenue), mono: true },
+        ].map((m) => (
+          <div key={m.label} className="rounded-xl border border-rule bg-paper p-4">
+            <p className={`text-xl font-bold text-ink ${m.mono ? 'font-display' : 'font-display'}`}>
+              {m.value}
+            </p>
+            <p className="mt-0.5 text-xs text-muted">{m.label}</p>
+          </div>
+        ))}
       </div>
 
+      {/* Filter tabs */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        {FILTER_OPTIONS.map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`shrink-0 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+              filter === f
+                ? 'bg-accent/10 text-accent'
+                : 'bg-cream text-muted hover:bg-rule hover:text-ink'
+            }`}
+          >
+            {f === 'all' ? 'Todos' : STATUS_LABEL[f]}
+          </button>
+        ))}
+      </div>
+
+      {/* Orders list */}
       {filtered.length === 0 ? (
-        <div className="rounded-xl border-2 border-dashed border-rule py-16 text-center">
-          <p className="text-sm font-sans text-muted">Sin pedidos en este estado</p>
-        </div>
+        <p className="py-12 text-center text-sm text-muted">No hay pedidos para mostrar.</p>
       ) : (
-        <div className="space-y-2">
-          {filtered.map((order) => {
-            const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending!;
-            const isOpen = expanded === order.id;
-
-            return (
-              <div key={order.id} className="overflow-hidden rounded-xl border border-rule bg-card">
-                <button
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-cream transition-colors"
-                  onClick={() => setExpanded(isOpen ? null : order.id)}
-                  aria-expanded={isOpen}
-                >
-                  <span className="font-display text-lg font-bold text-ink w-10 shrink-0">
-                    {order.table_number ?? '?'}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <Badge variant={cfg.variant}>{cfg.label}</Badge>
-                      {order.customer_name && (
-                        <span className="text-xs text-muted truncate">{order.customer_name}</span>
-                      )}
-                    </div>
-                    <p className="text-xs font-mono text-muted mt-0.5">
-                      {formatTime(order.created_at)}
-                      {order.round > 1 && ` · Ronda ${order.round}`}
-                    </p>
-                  </div>
-                  <span className="font-mono text-sm font-bold text-ink shrink-0">
-                    ${Number(order.total).toFixed(2)}
-                  </span>
-                </button>
-
-                {isOpen && (
-                  <div className="border-t border-rule bg-cream/50 px-4 py-3">
-                    <ul className="space-y-1">
-                      {order.order_items.map((item) => (
-                        <li key={item.id} className="flex justify-between text-sm font-sans">
-                          <span className="text-ink">{item.quantity}× {item.name}</span>
-                          <span className="font-mono text-muted">${(item.price * item.quantity).toFixed(2)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+        <div className="flex flex-col gap-2">
+          {filtered.map((order) => (
+            <div key={order.id} className="overflow-hidden rounded-xl border border-rule bg-paper">
+              <button
+                onClick={() => setExpanded((v) => (v === order.id ? null : order.id))}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left"
+                aria-expanded={expanded === order.id}
+              >
+                {expanded === order.id ? (
+                  <ChevronDown className="h-4 w-4 shrink-0 text-muted" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted" />
                 )}
-              </div>
-            );
-          })}
+                <span className="font-mono text-xs text-muted">
+                  #{order.id.slice(-6).toUpperCase()}
+                </span>
+                <Badge variant={STATUS_VARIANT[order.status] ?? 'muted'}>
+                  {STATUS_LABEL[order.status] ?? order.status}
+                </Badge>
+                <span className="flex-1 text-right font-display text-sm font-bold text-ink">
+                  {formatMXN(order.total_amount)}
+                </span>
+                <span className="text-xs text-muted">{formatRelativeDate(order.created_at)}</span>
+              </button>
+
+              {expanded === order.id && (
+                <div className="border-t border-rule px-4 py-3">
+                  <ul className="flex flex-col gap-1.5">
+                    {order.order_items.map((item) => (
+                      <li key={item.id} className="flex items-center justify-between text-sm">
+                        <span className="text-ink">
+                          {item.quantity}× {item.name}
+                        </span>
+                        <span className="font-mono text-xs text-muted">
+                          {formatMXN(item.price * item.quantity)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {order.notes && (
+                    <p className="mt-2 text-xs text-muted">Nota: {order.notes}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

@@ -1,130 +1,64 @@
 'use client';
 
-import { cn } from '@menuos/ui';
+import { StampCard } from '@menuos/ui';
+import type { Tables } from '@menuos/database';
 
-interface Program {
-  id: string;
-  name: string;
-  stamps_required: number;
-  reward_type: string;
-  reward_value: string;
-}
-
-interface StampCard {
-  id: string;
-  stamp_count: number;
-  is_complete: boolean;
-  completed_at: string | null;
-}
-
-interface Reward {
-  id: string;
-  code: string;
-  redeemed_at: string | null;
-  expires_at: string | null;
-}
+type Program = Tables<'loyalty_programs'>;
+type Card = Tables<'stamp_cards'>;
+type Reward = Tables<'rewards'>;
 
 interface StampCardViewProps {
   program: Program;
-  stampCard: StampCard | null;
-  reward: Reward | null;
-  orgName: string;
+  card: Card | null;
+  pendingRewards: Reward[];
+  customerName: string;
 }
 
-export function StampCardView({ program, stampCard, reward, orgName }: StampCardViewProps) {
-  const count = stampCard?.stamp_count ?? 0;
-  const required = program.stamps_required;
-  const isComplete = stampCard?.is_complete ?? false;
-  const remaining = Math.max(0, required - count);
+export function StampCardView({ program, card, pendingRewards, customerName }: StampCardViewProps) {
+  const stampsCount = card?.stamps_count ?? 0;
+  const remaining = program.stamps_required - stampsCount;
 
   return (
-    <div className="space-y-6">
-      <div className="text-center">
+    <div className="flex flex-col gap-6 p-6">
+      <div>
         <h1 className="font-display text-2xl font-bold text-ink">{program.name}</h1>
-        <p className="mt-1 text-sm font-sans text-muted">{orgName}</p>
+        <p className="mt-1 text-sm text-muted">Hola, {customerName}</p>
       </div>
 
-      {/* Stamp grid */}
-      <div className="rounded-2xl border border-rule bg-card p-6">
-        <div
-          className="grid gap-3"
-          style={{ gridTemplateColumns: `repeat(${Math.min(required, 4)}, 1fr)` }}
-          aria-label={`${count} de ${required} sellos`}
-        >
-          {Array.from({ length: required }, (_, i) => {
-            const filled = i < count;
-            return (
-              <div
-                key={i}
-                className={cn(
-                  'flex aspect-square items-center justify-center rounded-xl border-2 text-2xl transition-all',
-                  filled
-                    ? 'border-accent bg-accent/10 shadow-sm'
-                    : 'border-rule bg-cream'
-                )}
-                aria-label={filled ? `Sello ${i + 1} obtenido` : `Sello ${i + 1} pendiente`}
-              >
-                {filled ? '⭐' : ''}
-              </div>
-            );
-          })}
-        </div>
+      <StampCard
+        stampsEarned={stampsCount}
+        stampsRequired={program.stamps_required}
+        rewardDescription={program.reward_description}
+        programName={program.name}
+      />
 
-        <div className="mt-4 text-center">
-          {isComplete ? (
-            <p className="font-display text-lg font-bold text-accent">¡Tarjeta completa! 🎉</p>
-          ) : (
-            <p className="text-sm font-sans text-muted">
-              Te faltan <strong className="text-ink">{remaining} sello{remaining !== 1 ? 's' : ''}</strong> para tu recompensa
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Reward info */}
-      <div className="rounded-xl border border-rule bg-cream p-4">
-        <p className="text-xs font-mono text-muted uppercase tracking-wider">Tu recompensa</p>
-        <p className="mt-1 font-display text-lg font-bold text-ink">{program.reward_value}</p>
-      </div>
-
-      {/* Reward code */}
-      {isComplete && reward && (
-        <div className={cn(
-          'rounded-2xl border-2 p-5 text-center',
-          reward.redeemed_at ? 'border-rule bg-cream opacity-60' : 'border-accent bg-accent/5'
-        )}>
-          <p className="text-sm font-sans font-medium text-ink mb-2">
-            {reward.redeemed_at ? 'Recompensa usada' : 'Código de recompensa'}
+      <div className="rounded-xl border border-rule bg-paper p-4 text-center">
+        {stampsCount >= program.stamps_required ? (
+          <p className="font-display text-lg font-bold text-accent">
+            🎉 ¡Tarjeta completa!
           </p>
-          <p className="font-mono text-3xl font-black tracking-widest text-accent">
-            {reward.code}
-          </p>
-          {reward.expires_at && !reward.redeemed_at && (
-            <p className="mt-2 text-xs font-sans text-muted">
-              Válido hasta: {new Intl.DateTimeFormat('es-MX', {
-                day: 'numeric', month: 'long', year: 'numeric',
-              }).format(new Date(reward.expires_at))}
+        ) : (
+          <>
+            <p className="font-display text-3xl font-bold text-ink">{remaining}</p>
+            <p className="text-sm text-muted">
+              sello{remaining !== 1 ? 's' : ''} para tu recompensa
             </p>
-          )}
-          {reward.redeemed_at && (
-            <p className="mt-2 text-xs font-sans text-muted">
-              Canjeado: {new Intl.DateTimeFormat('es-MX', {
-                day: 'numeric', month: 'long',
-              }).format(new Date(reward.redeemed_at))}
-            </p>
-          )}
-          {!stampCard && (
-            <p className="mt-3 text-xs font-sans text-muted">
-              Muestra este código al mesero para obtener tu recompensa.
-            </p>
-          )}
-        </div>
-      )}
+          </>
+        )}
+        <p className="mt-2 text-xs text-muted">{program.reward_description}</p>
+      </div>
 
-      {!stampCard && (
-        <p className="text-center text-xs font-sans text-muted">
-          Regístrate la próxima vez que visites {orgName} para comenzar a acumular sellos.
-        </p>
+      {pendingRewards.length > 0 && (
+        <div className="rounded-xl border border-accent/30 bg-accent/5 p-4">
+          <p className="mb-3 font-display font-semibold text-ink">Recompensas pendientes</p>
+          {pendingRewards.map((r) => (
+            <div key={r.id} className="flex items-center justify-between rounded border border-rule bg-paper px-4 py-3">
+              <p className="text-sm text-ink">{program.reward_description}</p>
+              <p className="font-mono text-sm font-bold text-accent">{r.code}</p>
+            </div>
+          ))}
+          <p className="mt-2 text-xs text-muted">Muestra este código al mesero para canjear tu recompensa.</p>
+        </div>
       )}
     </div>
   );

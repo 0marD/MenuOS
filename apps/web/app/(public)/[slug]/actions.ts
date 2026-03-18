@@ -1,203 +1,286 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { customerRegistrationSchema, type CustomerRegistrationInput } from '@menuos/shared/validations';
 
-/**
- * Phone encryption: uses pgcrypto AES via Supabase RPC in production.
- * The encryption key must be set in PHONE_ENCRYPTION_KEY env var.
- * Migration 0015 creates the encrypt_phone() RPC function.
- */
-async function encryptPhone(supabase: Awaited<ReturnType<typeof createClient>>, phone: string): Promise<string> {
-  const key = process.env['PHONE_ENCRYPTION_KEY'];
-  if (key && key.length >= 16) {
-    const { data } = await supabase.rpc('encrypt_phone', { phone, key });
-    if (data) return data as string;
-  }
-  // Fallback: base64 (only for local dev where PHONE_ENCRYPTION_KEY is not set)
-  // In production, PHONE_ENCRYPTION_KEY must be set or this will log a warning
-  if (process.env['NODE_ENV'] === 'production') {
-    console.error('[SECURITY] PHONE_ENCRYPTION_KEY is not set — phone stored unencrypted');
-  }
-  return Buffer.from(phone).toString('base64');
-}
+// ── Public menu ──────────────────────────────────────────────────────────────
 
-function phoneLast4(phone: string): string {
-  const digits = phone.replace(/\D/g, '');
-  return digits.slice(-4);
-}
-
-export async function registerCustomer(
-  orgId: string,
-  data: CustomerRegistrationInput
-): Promise<{ success: boolean; error?: string }> {
-  const parsed = customerRegistrationSchema.safeParse(data);
-  if (!parsed.success) return { success: false, error: 'Datos inválidos' };
-
-  // Validate the org exists and accepts registrations
+export async function getMenuBySlug(slug: string) {
   const supabase = await createClient();
+
   const { data: org } = await supabase
     .from('organizations')
-    .select('id')
-    .eq('id', orgId)
-    .is('deleted_at', null)
+    .select('id, name, slug, logo_url, banner_url, primary_color, secondary_color')
+    .eq('slug', slug)
     .single();
 
-  if (!org) return { success: false, error: 'Organización no encontrada' };
+  if (!org) return null;
 
-  const last4 = phoneLast4(parsed.data.phone);
+  const { data: categories } = await supabase
+    .from('menu_categories')
+    .select('*, menu_items(*)')
+    .eq('organization_id', org.id)
+    .eq('is_visible', true)
+    .is('deleted_at', null)
+    .order('sort_order');
+
+  const normalizedCategories = (categories ?? []).map((cat) => ({
+    ...cat,
+    menu_items: (cat.menu_items ?? [])
+      .filter((item) => item.deleted_at === null)
+      .sort((a, b) => a.sort_order - b.sort_order),
+  }));
+
+  return { org, categories: normalizedCategories };
+}
+
+// ── Customer registration ────────────────────────────────────────────────────
+
+async function encryptPhone(phone: string): Promise<{ encrypted: string; hash: string }> {
+  const key = process.env.PHONE_ENCRYPTION_KEY;
+  if (!key) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('PHONE_ENCRYPTION_KEY is not set');
+    }
+    // dev fallback — store plain
+    return { encrypted: phone, hash: phone };
+  }
+
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(key.slice(0, 32).padEnd(32, '0'));
+  const cryptoKey = await crypto.subtle.importKey('raw', keyData, 'AES-GCM', false, ['encrypt']);
+
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    cryptoKey,
+    encoder.encode(phone),
+  );
+
+  const encrypted = Buffer.from([...iv, ...new Uint8Array(ciphertext)]).toString('base64');
+
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(phone));
+  const hash = Buffer.from(hashBuffer).toString('hex');
+
+  return { encrypted, hash };
+}
+
+export async function sendOtp(orgId: string, phone: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.functions.invoke('send-otp', {
+    body: { phone, organization_id: orgId },
+  });
+  if (error) return { error: 'No se pudo enviar el código. Intenta de nuevo.' };
+  return { sent: true };
+}
+
+export async function verifyOtpAndRegister(
+  orgId: string,
+  name: string,
+  phone: string,
+  code: string,
+  optInMarketing: boolean,
+) {
+  const supabase = await createClient();
+
+  // Hash phone the same way as send-otp Edge Function
+  const encoder = new TextEncoder();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(phone));
+  const phoneHash = Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  // Find valid, unverified OTP
+  const { data: otp } = await supabase
+    .from('otp_codes')
+    .select('id, attempts')
+    .eq('organization_id', orgId)
+    .eq('phone_hash', phoneHash)
+    .eq('code', code)
+    .is('verified_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!otp) {
+    // Increment attempts on latest OTP for this phone (if exists)
+    const { data: latest } = await supabase
+      .from('otp_codes')
+      .select('id, attempts')
+      .eq('organization_id', orgId)
+      .eq('phone_hash', phoneHash)
+      .is('verified_at', null)
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (latest) {
+      const newAttempts = latest.attempts + 1;
+      await supabase
+        .from('otp_codes')
+        .update({ attempts: newAttempts })
+        .eq('id', latest.id);
+
+      if (newAttempts >= 5) {
+        return { error: 'Demasiados intentos incorrectos. Solicita un nuevo código.' };
+      }
+    }
+
+    return { error: 'Código incorrecto o expirado.' };
+  }
+
+  // Mark OTP as verified
+  await supabase
+    .from('otp_codes')
+    .update({ verified_at: new Date().toISOString() })
+    .eq('id', otp.id);
+
+  // Now register/update customer
+  const { encrypted, hash } = await encryptPhone(phone);
+
   const { data: existing } = await supabase
     .from('customers')
     .select('id')
     .eq('organization_id', orgId)
-    .eq('phone_last4', last4)
-    .is('deleted_at', null)
-    .maybeSingle();
+    .eq('phone_hash', hash)
+    .single();
 
-  if (existing) return { success: true }; // Silent: don't reveal match
+  if (existing) {
+    await supabase
+      .from('customers')
+      .update({ name, opt_in_marketing: optInMarketing, last_visit_at: new Date().toISOString() })
+      .eq('id', existing.id);
+    await supabase
+      .from('customer_visits')
+      .insert({ customer_id: existing.id, organization_id: orgId });
+    return { customerId: existing.id };
+  }
 
-  const phoneEncrypted = await encryptPhone(supabase, parsed.data.phone);
-
-  const { error, data: customer } = await supabase
+  const { data: customer, error } = await supabase
     .from('customers')
     .insert({
       organization_id: orgId,
-      name: parsed.data.name.trim(),
-      phone_encrypted: phoneEncrypted,
-      phone_last4: last4,
-      is_opted_in: parsed.data.consent,
-      segment: 'new',
+      name,
+      whatsapp_number: encrypted,
+      phone_hash: hash,
+      opt_in_marketing: optInMarketing,
     })
     .select('id')
     .single();
 
-  if (error || !customer) return { success: false, error: 'No se pudo completar el registro' };
+  if (error || !customer) return { error: 'Error al registrar cliente.' };
 
-  await supabase.from('customer_consents').insert([
-    { customer_id: customer.id, consent_type: 'marketing', granted: parsed.data.consent },
-    { customer_id: customer.id, consent_type: 'data_processing', granted: true },
-  ]);
+  await supabase
+    .from('customer_visits')
+    .insert({ customer_id: customer.id, organization_id: orgId });
 
-  return { success: true };
+  return { customerId: customer.id };
 }
 
-interface OrderItemInput {
-  menu_item_id: string;
+// Keep legacy export for backward compat (bypasses OTP — used in dev/admin)
+export async function registerOrUpdateCustomer(
+  orgId: string,
+  name: string,
+  phone: string,
+  optInMarketing: boolean,
+) {
+  const supabase = await createClient();
+  const { encrypted, hash } = await encryptPhone(phone);
+
+  const { data: existing } = await supabase
+    .from('customers')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('phone_hash', hash)
+    .single();
+
+  if (existing) {
+    await supabase
+      .from('customers')
+      .update({ name, opt_in_marketing: optInMarketing, last_visit_at: new Date().toISOString() })
+      .eq('id', existing.id);
+    await supabase
+      .from('customer_visits')
+      .insert({ customer_id: existing.id, organization_id: orgId });
+    return { customerId: existing.id };
+  }
+
+  const { data: customer, error } = await supabase
+    .from('customers')
+    .insert({
+      organization_id: orgId,
+      name,
+      whatsapp_number: encrypted,
+      phone_hash: hash,
+      opt_in_marketing: optInMarketing,
+    })
+    .select('id')
+    .single();
+
+  if (error || !customer) return { error: 'Error al registrar cliente.' };
+
+  await supabase
+    .from('customer_visits')
+    .insert({ customer_id: customer.id, organization_id: orgId });
+
+  return { customerId: customer.id };
+}
+
+// ── Place order ──────────────────────────────────────────────────────────────
+
+interface OrderItem {
+  id: string;
   name: string;
   price: number;
   quantity: number;
-  notes: string | null;
+  notes?: string;
 }
 
-interface PlaceOrderInput {
+export async function placeOrder({
+  orgId,
+  branchId,
+  tableId,
+  customerId,
+  items,
+}: {
   orgId: string;
   branchId: string;
-  tableToken: string | null;
-  tableNumber: number | null;
-  customerName: string | null;
-  notes: string | null;
-  items: OrderItemInput[];
-}
-
-export async function placeOrder(
-  input: PlaceOrderInput
-): Promise<{ success: boolean; error?: string; orderId?: string }> {
-  if (!input.items.length) return { success: false, error: 'El carrito está vacío' };
-  if (input.items.length > 50) return { success: false, error: 'Demasiados artículos' };
-
+  tableId: string | null;
+  customerId: string;
+  items: OrderItem[];
+}) {
   const supabase = await createClient();
 
-  // Validate org + branch exist and are active
-  const { data: branch } = await supabase
-    .from('branches')
-    .select('id, organization_id')
-    .eq('id', input.branchId)
-    .eq('organization_id', input.orgId)
-    .eq('is_active', true)
-    .is('deleted_at', null)
-    .single();
+  const totalAmount = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
-  if (!branch) return { success: false, error: 'Sucursal no disponible' };
-
-  // Resolve table by qr_token
-  let tableId: string | null = null;
-  let tableNumber = input.tableNumber;
-
-  if (input.tableToken) {
-    const { data: table } = await supabase
-      .from('restaurant_tables')
-      .select('id, number, branch_id')
-      .eq('qr_token', input.tableToken)
-      .eq('is_active', true)
-      .single();
-
-    if (table && table.branch_id === input.branchId) {
-      tableId = table.id;
-      tableNumber = table.number;
-    }
-  }
-
-  // Validate all menu items belong to the org and are available
-  const itemIds = input.items.map((i) => i.menu_item_id);
-  const { data: menuItems } = await supabase
-    .from('menu_items')
-    .select('id, price, is_available, is_sold_out_today, organization_id')
-    .in('id', itemIds)
-    .eq('organization_id', input.orgId)
-    .eq('is_available', true)
-    .eq('is_sold_out_today', false)
-    .is('deleted_at', null);
-
-  if (!menuItems || menuItems.length !== itemIds.length) {
-    return { success: false, error: 'Uno o más platillos no están disponibles' };
-  }
-
-  // Use server-side prices (never trust client prices)
-  const priceMap = new Map(menuItems.map((m) => [m.id, Number(m.price)]));
-  const total = input.items.reduce((s, i) => s + (priceMap.get(i.menu_item_id) ?? 0) * i.quantity, 0);
-
-  const { data: order, error: orderError } = await supabase
+  const { data: order, error } = await supabase
     .from('orders')
     .insert({
-      organization_id: input.orgId,
-      branch_id: input.branchId,
-      table_id: tableId,
-      table_number: tableNumber,
-      customer_name: input.customerName ? input.customerName.slice(0, 100) : null,
-      notes: input.notes ? input.notes.slice(0, 500) : null,
-      total,
+      organization_id: orgId,
+      branch_id: branchId,
+      table_id: tableId ?? null,
+      customer_id: customerId,
+      total_amount: totalAmount,
       status: 'pending',
     })
     .select('id')
     .single();
 
-  if (orderError || !order) {
-    return { success: false, error: 'No se pudo crear el pedido' };
-  }
+  if (error || !order) return { error: 'Error al crear el pedido.' };
 
-  const { error: itemsError } = await supabase.from('order_items').insert(
-    input.items.map((item) => ({
+  const orderItems = items.flatMap((i) =>
+    Array.from({ length: 1 }, () => ({
       order_id: order.id,
-      menu_item_id: item.menu_item_id,
-      name: item.name.slice(0, 150),
-      price: priceMap.get(item.menu_item_id) ?? item.price, // Use server price
-      quantity: Math.min(Math.max(1, item.quantity), 20),   // Clamp 1–20
-      notes: item.notes ? item.notes.slice(0, 300) : null,
-    }))
+      menu_item_id: i.id,
+      name: i.name,
+      price: i.price,
+      quantity: i.quantity,
+      notes: i.notes ?? null,
+    })),
   );
 
-  if (itemsError) {
-    await supabase
-      .from('orders')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', order.id);
-    return { success: false, error: 'Error al guardar los platillos' };
-  }
+  await supabase.from('order_items').insert(orderItems);
 
-  await supabase.from('order_status_history').insert({
-    order_id: order.id,
-    status: 'pending',
-  });
-
-  return { success: true, orderId: order.id };
+  return { orderId: order.id };
 }

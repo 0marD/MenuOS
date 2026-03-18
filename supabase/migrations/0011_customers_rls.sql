@@ -1,38 +1,46 @@
--- Migration: RLS policies for customers, customer_visits, customer_consents
--- Phase 1D — policies were missing from 0009
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customer_visits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customer_consents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE campaigns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE campaign_analytics ENABLE ROW LEVEL SECURITY;
 
--- CUSTOMERS: staff of same org can read/insert/update; no delete (soft delete only)
-create policy "customers_select_own_org" on public.customers
-  for select using (organization_id = public.get_user_org_id());
+-- Customers: public can register (insert), staff can read/update
+CREATE POLICY "public_insert_customer" ON customers
+  FOR INSERT WITH CHECK (true);
 
-create policy "customers_insert_own_org" on public.customers
-  for insert with check (organization_id = public.get_user_org_id());
+CREATE POLICY "staff_select_customers" ON customers
+  FOR SELECT USING (organization_id = auth_org_id());
 
-create policy "customers_update_own_org" on public.customers
-  for update using (
-    organization_id = public.get_user_org_id()
-    and public.get_user_role() in ('super_admin', 'manager')
+CREATE POLICY "staff_update_customer" ON customers
+  FOR UPDATE USING (organization_id = auth_org_id());
+
+-- Customer visits: public can create, staff can read
+CREATE POLICY "public_insert_visit" ON customer_visits
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "staff_select_visits" ON customer_visits
+  FOR SELECT USING (organization_id = auth_org_id());
+
+-- Customer consents
+CREATE POLICY "public_insert_consent" ON customer_consents
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "staff_select_consents" ON customer_consents
+  FOR SELECT USING (organization_id = auth_org_id());
+
+-- Campaigns
+CREATE POLICY "admin_all_campaigns" ON campaigns
+  FOR ALL USING (
+    organization_id = auth_org_id()
+    AND auth_role() IN ('super_admin', 'manager')
   );
 
--- Allow anon inserts (customer self-registration from public PWA)
-create policy "customers_insert_anon" on public.customers
-  for insert with check (true);
-
--- CUSTOMER_VISITS
-create policy "customer_visits_select_own_org" on public.customer_visits
-  for select using (organization_id = public.get_user_org_id());
-
-create policy "customer_visits_insert_staff" on public.customer_visits
-  for insert with check (organization_id = public.get_user_org_id());
-
--- CUSTOMER_CONSENTS
-create policy "customer_consents_select_own_org" on public.customer_consents
-  for select using (
-    customer_id in (
-      select id from public.customers
-      where organization_id = public.get_user_org_id()
+CREATE POLICY "admin_select_analytics" ON campaign_analytics
+  FOR SELECT USING (
+    campaign_id IN (
+      SELECT id FROM campaigns WHERE organization_id = auth_org_id()
     )
   );
 
-create policy "customer_consents_insert_anon" on public.customer_consents
-  for insert with check (true);
+CREATE POLICY "service_update_analytics" ON campaign_analytics
+  FOR UPDATE USING (true);

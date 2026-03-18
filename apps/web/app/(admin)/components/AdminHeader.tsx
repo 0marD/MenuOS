@@ -1,43 +1,51 @@
 'use client';
 
-import type { User } from '@supabase/supabase-js';
-import { LogOut } from 'lucide-react';
-import { Button } from '@menuos/ui/atoms/Button';
-import { Avatar, AvatarFallback } from '@menuos/ui/atoms/Avatar';
-import { logout } from '@/lib/auth/actions';
+import { Menu } from 'lucide-react';
+import { useState } from 'react';
+import type { StaffUser, Organization } from '@/lib/auth/get-session';
+import { AdminSidebar } from './AdminSidebar';
 
 interface AdminHeaderProps {
-  user: User;
-  staffName?: string;
+  title?: string;
+  staffUser: StaffUser;
+  org: Organization;
 }
 
-export function AdminHeader({ user, staffName }: AdminHeaderProps) {
-  const displayName = staffName ?? user.email ?? 'Usuario';
-  const initials = displayName.substring(0, 2).toUpperCase();
+export function AdminHeader({ title, staffUser, org }: AdminHeaderProps) {
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-rule bg-cream px-4">
-      <div className="md:hidden">
-        <span className="font-display text-lg font-bold text-ink">MenuOS</span>
-      </div>
-      <div className="flex-1" />
-      <div className="flex items-center gap-3">
-        <Avatar className="h-8 w-8">
-          <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-        </Avatar>
-        <span className="hidden text-xs font-sans text-muted md:block">{displayName}</span>
-        <form action={logout}>
-          <Button
-            type="submit"
-            variant="ghost"
-            size="icon"
-            aria-label="Cerrar sesión"
-            className="h-8 w-8"
+    <>
+      <div className="flex h-14 items-center justify-between px-4 lg:px-6">
+        <div className="flex items-center gap-3">
+          <button
+            className="rounded p-1.5 text-muted hover:bg-cream transition-colors lg:hidden"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Abrir menú"
           >
-            <LogOut className="h-4 w-4" aria-hidden="true" />
-          </Button>
-        </form>
+            <Menu className="h-5 w-5" />
+          </button>
+          {title && (
+            <h1 className="font-display text-xl font-bold text-ink">{title}</h1>
+          )}
+        </div>
+        <p className="hidden font-mono text-xs uppercase tracking-widest text-muted lg:block">
+          {org.name}
+        </p>
       </div>
-    </header>
+
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div
+            className="absolute inset-0 bg-ink/50"
+            onClick={() => setMobileOpen(false)}
+          />
+          <div className="absolute left-0 top-0 h-full w-64 shadow-xl">
+            <AdminSidebar staffUser={staffUser} org={org} />
+          </div>
+        </div>
+      )}
+    </>
   );
 }

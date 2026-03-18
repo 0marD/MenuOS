@@ -1,48 +1,42 @@
-import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
 import { KitchenDisplay } from './KitchenDisplay';
-
-export const metadata: Metadata = { title: 'Cocina — MenuOS KDS' };
+import { logoutPin } from '@/lib/auth/pin-actions';
 
 export default async function KitchenPage() {
+  const jar = await cookies();
+  const branchId = jar.get('menuos_branch_id')!.value;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/auth/pin');
 
-  const { data: staffUser } = await supabase
-    .from('staff_users')
-    .select('organization_id, branch_id')
-    .eq('auth_user_id', user.id)
-    .single();
-  if (!staffUser) redirect('/auth/pin');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  // Fetch confirmed/preparing orders (not pending/ready/done)
-  const query = supabase
+  const { data: orders } = await supabase
     .from('orders')
-    .select(`
-      id, table_number, status, round, created_at, notes, customer_name,
-      order_items ( id, name, quantity, notes, is_ready )
-    `)
-    .eq('organization_id', staffUser.organization_id)
+    .select('*, order_items(*)')
+    .eq('branch_id', branchId)
     .in('status', ['confirmed', 'preparing'])
-    .is('deleted_at', null)
-    .order('created_at', { ascending: true });
-
-  if (staffUser.branch_id) {
-    query.eq('branch_id', staffUser.branch_id);
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: rawOrders } = await query;
-  const orders = (rawOrders ?? []) as any[];
+    .gte('created_at', today.toISOString())
+    .order('created_at');
 
   return (
-    <KitchenDisplay
-      orders={orders}
-      orgId={staffUser.organization_id}
-    />
+    <div className="flex h-screen flex-col bg-neutral-950">
+      <header className="flex shrink-0 items-center justify-between border-b border-neutral-800 px-4 py-3">
+        <p className="font-display text-lg font-bold text-white">Cocina</p>
+        <div className="flex items-center gap-4">
+          <span className="font-mono text-xs text-neutral-400">
+            {orders?.length ?? 0} pedidos
+          </span>
+          <form action={logoutPin}>
+            <button type="submit" className="text-xs text-neutral-400 hover:text-white">
+              Salir
+            </button>
+          </form>
+        </div>
+      </header>
+      <div className="flex-1 overflow-y-auto">
+        <KitchenDisplay initialOrders={orders ?? []} branchId={branchId} />
+      </div>
+    </div>
   );
 }

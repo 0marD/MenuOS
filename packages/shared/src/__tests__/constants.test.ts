@@ -1,35 +1,36 @@
 import { describe, it, expect } from 'vitest';
 import {
   ROLES,
-  PERMISSIONS,
+  STAFF_ROLES,
+  ADMIN_ROLES,
   hasPermission,
-  PLAN_IDS,
   PLANS,
-  getPlanLimit,
-  isWithinPlanLimit,
-  CUSTOMER_SEGMENTS,
-  getSegmentFromVisitCount,
+  PLAN_LIMITS,
+  PLAN_PRICES_MXN,
+  TRIAL_DAYS,
+  SEGMENTS,
   DORMANT_THRESHOLD_DAYS,
   FREQUENT_VISIT_THRESHOLD,
-  ORDER_STATUSES,
-  TERMINAL_STATUSES,
-  ACTIVE_STATUSES,
-  isTerminalStatus,
-  getNextStatus,
-  MENU_ITEM_FILTERS,
-  PHONE_MX_REGEX,
-  SLUG_REGEX,
+  ORDER_STATUS,
+  ACTIVE_ORDER_STATUSES,
+  KDS_ALERT_MINUTES,
 } from '../constants';
 
-// ─── Roles & Permissions ────────────────────────────────────────────────────
+// ─── Roles & Permissions ─────────────────────────────────────────────────────
 
 describe('ROLES', () => {
   it('contains the four expected roles', () => {
-    expect(ROLES).toContain('super_admin');
-    expect(ROLES).toContain('manager');
-    expect(ROLES).toContain('waiter');
-    expect(ROLES).toContain('kitchen');
-    expect(ROLES).toHaveLength(4);
+    expect(Object.values(ROLES)).toContain('super_admin');
+    expect(Object.values(ROLES)).toContain('manager');
+    expect(Object.values(ROLES)).toContain('waiter');
+    expect(Object.values(ROLES)).toContain('kitchen');
+    expect(Object.values(ROLES)).toHaveLength(4);
+  });
+
+  it('STAFF_ROLES and ADMIN_ROLES are subsets of ROLES values', () => {
+    const allRoles = Object.values(ROLES);
+    for (const r of STAFF_ROLES) expect(allRoles).toContain(r);
+    for (const r of ADMIN_ROLES) expect(allRoles).toContain(r);
   });
 });
 
@@ -72,147 +73,96 @@ describe('hasPermission', () => {
 // ─── Plans ───────────────────────────────────────────────────────────────────
 
 describe('PLANS', () => {
-  it('has starter, pro, and business plans', () => {
-    expect(PLAN_IDS).toContain('starter');
-    expect(PLAN_IDS).toContain('pro');
-    expect(PLAN_IDS).toContain('business');
+  it('has starter, pro, and business plan values', () => {
+    expect(Object.values(PLANS)).toContain('starter');
+    expect(Object.values(PLANS)).toContain('pro');
+    expect(Object.values(PLANS)).toContain('business');
+  });
+});
+
+describe('PLAN_LIMITS', () => {
+  it('starter has lowest branch limit', () => {
+    expect(PLAN_LIMITS.starter.branches).toBeLessThan(PLAN_LIMITS.pro.branches as number);
   });
 
-  it('starter has lowest limits', () => {
-    expect(PLANS.starter.branches).toBeLessThan(PLANS.pro.branches);
-    expect(PLANS.starter.whatsappMessages).toBeLessThan(PLANS.pro.whatsappMessages);
+  it('starter has fewer WhatsApp messages than pro', () => {
+    expect(PLAN_LIMITS.starter.whatsappMessages).toBeLessThan(PLAN_LIMITS.pro.whatsappMessages as number);
   });
 
-  it('business plan has unlimited messages', () => {
-    expect(PLANS.business.whatsappMessages).toBe(Infinity);
-    expect(PLANS.business.crmContacts).toBe(Infinity);
+  it('business plan has unlimited messages and customers', () => {
+    expect(PLAN_LIMITS.business.whatsappMessages).toBe(Infinity);
+    expect(PLAN_LIMITS.business.customers).toBe(Infinity);
   });
 
-  it('getPlanLimit returns correct limit', () => {
-    expect(getPlanLimit('starter', 'whatsappMessages')).toBe(PLANS.starter.whatsappMessages);
-    expect(getPlanLimit('business', 'whatsappMessages')).toBe(Infinity);
+  it('starter plan does not have orders feature', () => {
+    expect(PLAN_LIMITS.starter.hasOrders).toBe(false);
   });
 
-  it('isWithinPlanLimit works correctly', () => {
-    expect(isWithinPlanLimit('starter', 'whatsappMessages', 0)).toBe(true);
-    expect(isWithinPlanLimit('starter', 'whatsappMessages', PLANS.starter.whatsappMessages)).toBe(false);
-    expect(isWithinPlanLimit('business', 'whatsappMessages', 999999)).toBe(true);
+  it('pro and business plans have orders feature', () => {
+    expect(PLAN_LIMITS.pro.hasOrders).toBe(true);
+    expect(PLAN_LIMITS.business.hasOrders).toBe(true);
+  });
+});
+
+describe('PLAN_PRICES_MXN', () => {
+  it('prices increase from starter to business', () => {
+    expect(PLAN_PRICES_MXN.starter).toBeLessThan(PLAN_PRICES_MXN.pro);
+    expect(PLAN_PRICES_MXN.pro).toBeLessThan(PLAN_PRICES_MXN.business);
+  });
+
+  it('trial period is 14 days', () => {
+    expect(TRIAL_DAYS).toBe(14);
   });
 });
 
 // ─── Customer Segments ───────────────────────────────────────────────────────
 
-describe('CUSTOMER_SEGMENTS', () => {
+describe('SEGMENTS', () => {
   it('has new, frequent, and dormant', () => {
-    expect(CUSTOMER_SEGMENTS).toContain('new');
-    expect(CUSTOMER_SEGMENTS).toContain('frequent');
-    expect(CUSTOMER_SEGMENTS).toContain('dormant');
-  });
-});
-
-describe('getSegmentFromVisitCount', () => {
-  it('new customer with recent visit', () => {
-    expect(getSegmentFromVisitCount(1, 0)).toBe('new');
-    expect(getSegmentFromVisitCount(2, 5)).toBe('new');
+    expect(Object.values(SEGMENTS)).toContain('new');
+    expect(Object.values(SEGMENTS)).toContain('frequent');
+    expect(Object.values(SEGMENTS)).toContain('dormant');
   });
 
-  it('frequent customer', () => {
-    expect(getSegmentFromVisitCount(FREQUENT_VISIT_THRESHOLD, 1)).toBe('frequent');
-    expect(getSegmentFromVisitCount(10, 10)).toBe('frequent');
-  });
-
-  it('dormant overrides visit count', () => {
-    expect(getSegmentFromVisitCount(10, DORMANT_THRESHOLD_DAYS)).toBe('dormant');
-    expect(getSegmentFromVisitCount(0, 30)).toBe('dormant');
-  });
-
-  it('dormant threshold is exactly 21 days', () => {
+  it('dormant threshold is 21 days', () => {
     expect(DORMANT_THRESHOLD_DAYS).toBe(21);
-    expect(getSegmentFromVisitCount(5, 20)).toBe('frequent');
-    expect(getSegmentFromVisitCount(5, 21)).toBe('dormant');
+  });
+
+  it('frequent threshold is 3 visits', () => {
+    expect(FREQUENT_VISIT_THRESHOLD).toBe(3);
   });
 });
 
 // ─── Order Statuses ──────────────────────────────────────────────────────────
 
-describe('ORDER_STATUSES', () => {
+describe('ORDER_STATUS', () => {
   it('contains all expected statuses', () => {
-    expect(ORDER_STATUSES).toContain('pending');
-    expect(ORDER_STATUSES).toContain('confirmed');
-    expect(ORDER_STATUSES).toContain('preparing');
-    expect(ORDER_STATUSES).toContain('ready');
-    expect(ORDER_STATUSES).toContain('delivered');
-    expect(ORDER_STATUSES).toContain('cancelled');
+    const statuses = Object.values(ORDER_STATUS);
+    expect(statuses).toContain('pending');
+    expect(statuses).toContain('confirmed');
+    expect(statuses).toContain('preparing');
+    expect(statuses).toContain('ready');
+    expect(statuses).toContain('delivered');
+    expect(statuses).toContain('cancelled');
   });
 });
 
-describe('isTerminalStatus', () => {
-  it('delivered and cancelled are terminal', () => {
-    expect(isTerminalStatus('delivered')).toBe(true);
-    expect(isTerminalStatus('cancelled')).toBe(true);
+describe('ACTIVE_ORDER_STATUSES', () => {
+  it('does not include terminal statuses', () => {
+    expect(ACTIVE_ORDER_STATUSES).not.toContain('delivered');
+    expect(ACTIVE_ORDER_STATUSES).not.toContain('cancelled');
   });
 
-  it('active statuses are not terminal', () => {
-    for (const s of ACTIVE_STATUSES) {
-      expect(isTerminalStatus(s)).toBe(false);
-    }
-  });
-
-  it('TERMINAL_STATUSES and ACTIVE_STATUSES are disjoint', () => {
-    const overlap = TERMINAL_STATUSES.filter((s) => ACTIVE_STATUSES.includes(s as never));
-    expect(overlap).toHaveLength(0);
+  it('includes all intermediate statuses', () => {
+    expect(ACTIVE_ORDER_STATUSES).toContain('pending');
+    expect(ACTIVE_ORDER_STATUSES).toContain('confirmed');
+    expect(ACTIVE_ORDER_STATUSES).toContain('preparing');
+    expect(ACTIVE_ORDER_STATUSES).toContain('ready');
   });
 });
 
-describe('getNextStatus', () => {
-  it('follows the correct order flow', () => {
-    expect(getNextStatus('pending')).toBe('confirmed');
-    expect(getNextStatus('confirmed')).toBe('preparing');
-    expect(getNextStatus('preparing')).toBe('ready');
-    expect(getNextStatus('ready')).toBe('delivered');
-  });
-
-  it('returns null for terminal statuses', () => {
-    expect(getNextStatus('delivered')).toBeNull();
-    expect(getNextStatus('cancelled')).toBeNull();
-  });
-});
-
-// ─── Regex Constants ─────────────────────────────────────────────────────────
-
-describe('SLUG_REGEX', () => {
-  it('accepts valid slugs', () => {
-    expect(SLUG_REGEX.test('la-cantina')).toBe(true);
-    expect(SLUG_REGEX.test('mi-restaurante-123')).toBe(true);
-    expect(SLUG_REGEX.test('abc')).toBe(true);
-  });
-
-  it('rejects invalid slugs', () => {
-    expect(SLUG_REGEX.test('La Cantina')).toBe(false);
-    expect(SLUG_REGEX.test('mi_restaurante')).toBe(false);
-    expect(SLUG_REGEX.test('café')).toBe(false);
-  });
-});
-
-describe('PHONE_MX_REGEX', () => {
-  it('accepts valid Mexican phone numbers', () => {
-    expect(PHONE_MX_REGEX.test('+525512345678')).toBe(true);
-    expect(PHONE_MX_REGEX.test('+523312345678')).toBe(true);
-  });
-
-  it('rejects invalid formats', () => {
-    expect(PHONE_MX_REGEX.test('5215512345678')).toBe(false);  // missing +
-    expect(PHONE_MX_REGEX.test('+521234')).toBe(false);         // too short
-    expect(PHONE_MX_REGEX.test('+5200000000000')).toBe(false);  // leading 0
-    expect(PHONE_MX_REGEX.test('+5212345678')).toBe(false);     // 9 digits only
-  });
-});
-
-describe('MENU_ITEM_FILTERS', () => {
-  it('contains expected dietary filters', () => {
-    expect(MENU_ITEM_FILTERS).toContain('vegetariano');
-    expect(MENU_ITEM_FILTERS).toContain('sin_gluten');
-    expect(MENU_ITEM_FILTERS).toContain('picante');
-    expect(MENU_ITEM_FILTERS).toContain('vegano');
+describe('KDS_ALERT_MINUTES', () => {
+  it('is 15 minutes', () => {
+    expect(KDS_ALERT_MINUTES).toBe(15);
   });
 });

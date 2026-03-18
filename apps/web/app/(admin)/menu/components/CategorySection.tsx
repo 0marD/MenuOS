@@ -1,184 +1,214 @@
 'use client';
 
-import { useState } from 'react';
-import { ChevronDown, ChevronUp, Plus, Pencil, Trash2, Eye, EyeOff } from 'lucide-react';
-import { Button } from '@menuos/ui/atoms/Button';
-import { Badge } from '@menuos/ui/atoms/Badge';
-import { Toggle } from '@menuos/ui/atoms/Toggle';
-import { cn } from '@menuos/ui';
-import { MenuItemRow } from './MenuItemRow';
-import { CreateItemDialog } from './CreateItemDialog';
+import { ChevronDown, ChevronRight, Eye, EyeOff, GripVertical, Trash2 } from 'lucide-react';
+import { useOptimistic, useState, useTransition } from 'react';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { restrictToVerticalAxis, restrictToParentElement } from '@dnd-kit/modifiers';
+import { CSS } from '@dnd-kit/utilities';
+import { Badge } from '@menuos/ui';
+import type { Tables } from '@menuos/database';
+import { deleteCategory, reorderMenuItems, toggleCategoryVisibility } from '../actions';
 import { EditCategoryDialog } from './EditCategoryDialog';
-import { toggleCategoryVisibility, deleteCategory } from '../actions';
-import type { Tables } from '@menuos/database/types';
-
-type MenuItemWithRelations = Tables<'menu_items'> & {
-  menu_item_photos: Array<{ url: string; position: number }>;
-  menu_item_filters: Array<{ filter: string }>;
-};
+import { CreateItemDialog } from './CreateItemDialog';
+import { MenuItemRow } from './MenuItemRow';
 
 type CategoryWithItems = Tables<'menu_categories'> & {
-  menu_items: MenuItemWithRelations[];
+  menu_items: Tables<'menu_items'>[];
 };
 
 interface CategorySectionProps {
   category: CategoryWithItems;
-  onUpdated: (category: Tables<'menu_categories'>) => void;
-  onDeleted: (id: string) => void;
+  allCategories: Pick<Tables<'menu_categories'>, 'id' | 'name'>[];
 }
 
-export function CategorySection({ category, onUpdated, onDeleted }: CategorySectionProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
-  const [items, setItems] = useState(category.menu_items);
-  const [isCreatingItem, setIsCreatingItem] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isVisible, setIsVisible] = useState(category.is_visible);
+export function SortableCategorySection({ category, allCategories }: CategorySectionProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: category.id,
+  });
 
-  async function handleToggleVisibility() {
-    const newValue = !isVisible;
-    setIsVisible(newValue);
-    await toggleCategoryVisibility(category.id, newValue);
-    onUpdated({ ...category, is_visible: newValue });
-  }
-
-  async function handleDelete() {
-    if (!confirm(`¿Eliminar la categoría "${category.name}"? Los platillos también serán eliminados.`)) return;
-    await deleteCategory(category.id);
-    onDeleted(category.id);
-  }
-
-  function handleItemCreated(item: Tables<'menu_items'>) {
-    setItems((prev) => [
-      ...prev,
-      { ...item, menu_item_photos: [], menu_item_filters: [] },
-    ]);
-    setIsCreatingItem(false);
-  }
-
-  function handleItemUpdated(updated: Tables<'menu_items'>) {
-    setItems((prev) =>
-      prev.map((it) => (it.id === updated.id ? { ...it, ...updated } : it))
-    );
-  }
-
-  function handleItemDeleted(id: string) {
-    setItems((prev) => prev.filter((it) => it.id !== id));
-  }
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
 
   return (
-    <section
-      className="overflow-hidden rounded-xl border border-rule bg-card"
-      aria-labelledby={`category-${category.id}`}
-    >
-      <div className="flex items-center gap-2 p-4">
-        <button
-          onClick={() => setIsExpanded((v) => !v)}
-          className="flex flex-1 items-center gap-2 text-left"
-          aria-expanded={isExpanded}
-          aria-controls={`category-items-${category.id}`}
-        >
-          {category.icon && (
-            <span className="text-lg" aria-hidden="true">{category.icon}</span>
-          )}
-          <h2
-            id={`category-${category.id}`}
-            className="font-display text-base font-semibold text-ink"
-          >
-            {category.name}
-          </h2>
-          <Badge variant="outline" className="ml-1 text-[10px]">
-            {items.length}
-          </Badge>
-          {isExpanded ? (
-            <ChevronUp className="ml-auto h-4 w-4 text-muted" aria-hidden="true" />
-          ) : (
-            <ChevronDown className="ml-auto h-4 w-4 text-muted" aria-hidden="true" />
-          )}
-        </button>
-        <Toggle
-          pressed={isVisible}
-          onPressedChange={handleToggleVisibility}
-          aria-label={isVisible ? 'Ocultar categoría' : 'Mostrar categoría'}
-          size="sm"
-          variant="outline"
-        >
-          {isVisible ? (
-            <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-          ) : (
-            <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
-          )}
-        </Toggle>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          aria-label="Editar categoría"
-          onClick={() => setIsEditing(true)}
-        >
-          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-destructive hover:text-destructive"
-          aria-label="Eliminar categoría"
-          onClick={handleDelete}
-        >
-          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-        </Button>
-      </div>
+    <div ref={setNodeRef} style={style}>
+      <CategorySection
+        category={category}
+        allCategories={allCategories}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </div>
+  );
+}
 
-      <div
-        id={`category-items-${category.id}`}
-        className={cn('border-t border-rule', !isExpanded && 'hidden')}
-      >
-        {items.length === 0 ? (
-          <p className="px-4 py-6 text-center text-xs font-sans text-muted">
-            Esta categoría no tiene platillos
-          </p>
-        ) : (
-          <ul role="list" className="divide-y divide-rule">
-            {items.map((item) => (
-              <li key={item.id}>
-                <MenuItemRow
-                  item={item}
-                  onUpdated={handleItemUpdated}
-                  onDeleted={handleItemDeleted}
-                />
-              </li>
-            ))}
-          </ul>
+interface CategorySectionInnerProps extends CategorySectionProps {
+  dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
+}
+
+function CategorySection({ category, allCategories, dragHandleProps }: CategorySectionInnerProps) {
+  const [items, setItems] = useState(category.menu_items);
+  const [expanded, setExpanded] = useState(true);
+  const [, startTransition] = useTransition();
+  const [optimisticVisible, setOptimisticVisible] = useOptimistic(category.is_visible);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  function handleToggleVisibility() {
+    startTransition(async () => {
+      setOptimisticVisible(!optimisticVisible);
+      await toggleCategoryVisibility(category.id, !optimisticVisible);
+    });
+  }
+
+  function handleDelete() {
+    if (
+      !confirm(
+        `¿Eliminar la categoría "${category.name}"? Los platillos dentro también serán eliminados.`,
+      )
+    )
+      return;
+    startTransition(async () => { await deleteCategory(category.id); });
+  }
+
+  function handleItemDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = items.findIndex((i) => i.id === active.id);
+    const newIndex = items.findIndex((i) => i.id === over.id);
+    const reordered = arrayMove(items, oldIndex, newIndex);
+
+    setItems(reordered);
+    startTransition(async () => {
+      await reorderMenuItems(reordered.map((i) => i.id));
+    });
+  }
+
+  const itemCount = items.length;
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-rule bg-paper">
+      <div className="flex items-center gap-3 px-4 py-3">
+        {/* Drag handle */}
+        <button
+          {...dragHandleProps}
+          className="cursor-grab touch-none rounded p-0.5 text-muted hover:text-ink active:cursor-grabbing"
+          aria-label="Arrastrar para reordenar categoría"
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="flex items-center gap-2 text-left"
+          aria-expanded={expanded}
+          aria-label={expanded ? 'Colapsar categoría' : 'Expandir categoría'}
+        >
+          {expanded ? (
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted" />
+          ) : (
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted" />
+          )}
+
+          {category.icon && (
+            <span className="text-xl leading-none" aria-hidden>
+              {category.icon}
+            </span>
+          )}
+
+          {category.color && (
+            <span
+              className="h-3 w-3 shrink-0 rounded-full"
+              style={{ backgroundColor: category.color }}
+              aria-hidden
+            />
+          )}
+
+          <span className="font-display text-base font-semibold text-ink">{category.name}</span>
+        </button>
+
+        <Badge variant="muted" className="ml-1">
+          {itemCount} {itemCount === 1 ? 'platillo' : 'platillos'}
+        </Badge>
+
+        {!optimisticVisible && (
+          <Badge variant="outline" className="shrink-0">
+            Oculta
+          </Badge>
         )}
-        <div className="p-3 pt-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full text-xs"
-            onClick={() => setIsCreatingItem(true)}
+
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            onClick={handleToggleVisibility}
+            className="rounded p-1.5 text-muted transition-colors hover:bg-cream hover:text-ink"
+            aria-label={optimisticVisible ? 'Ocultar categoría' : 'Mostrar categoría'}
           >
-            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-            Agregar platillo
-          </Button>
+            {optimisticVisible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+          </button>
+
+          <EditCategoryDialog category={category} />
+
+          <button
+            onClick={handleDelete}
+            className="rounded p-1.5 text-muted transition-colors hover:bg-red-50 hover:text-red-600"
+            aria-label={`Eliminar categoría ${category.name}`}
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
-      {isCreatingItem && (
-        <CreateItemDialog
-          categoryId={category.id}
-          onCreated={handleItemCreated}
-          onClose={() => setIsCreatingItem(false)}
-        />
+      {expanded && (
+        <div className="border-t border-rule">
+          {itemCount === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-muted">
+              No hay platillos en esta categoría.
+            </p>
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleItemDragEnd}
+              modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+            >
+              <SortableContext
+                items={items.map((i) => i.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="flex flex-col gap-2 p-3">
+                  {items.map((item) => (
+                    <MenuItemRow key={item.id} item={item} categories={allCategories} />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          )}
+
+          <div className="border-t border-rule px-3 py-2">
+            <CreateItemDialog categoryId={category.id} categories={allCategories} />
+          </div>
+        </div>
       )}
-      {isEditing && (
-        <EditCategoryDialog
-          category={category}
-          onUpdated={(updated) => {
-            onUpdated(updated);
-            setIsEditing(false);
-          }}
-          onClose={() => setIsEditing(false)}
-        />
-      )}
-    </section>
+    </div>
   );
 }

@@ -1,119 +1,130 @@
 'use client';
 
-import { useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
-import { Button } from '@menuos/ui/atoms/Button';
-import { Toggle } from '@menuos/ui/atoms/Toggle';
-import { Badge } from '@menuos/ui/atoms/Badge';
-import { cn } from '@menuos/ui';
+import { GripVertical, Trash2 } from 'lucide-react';
+import { useOptimistic, useTransition } from 'react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Badge } from '@menuos/ui';
+import { formatMXN } from '@menuos/shared';
+import type { Tables } from '@menuos/database';
+import { deleteMenuItem, toggleMenuItemAvailable, toggleMenuItemSoldOut } from '../actions';
 import { EditItemDialog } from './EditItemDialog';
-import { toggleItemSoldOut, deleteItem } from '../actions';
-import type { Tables } from '@menuos/database/types';
-
-type MenuItemWithRelations = Tables<'menu_items'> & {
-  menu_item_photos: Array<{ url: string; position: number }>;
-  menu_item_filters: Array<{ filter: string }>;
-};
 
 interface MenuItemRowProps {
-  item: MenuItemWithRelations;
-  onUpdated: (item: Tables<'menu_items'>) => void;
-  onDeleted: (id: string) => void;
+  item: Tables<'menu_items'>;
+  categories: Pick<Tables<'menu_categories'>, 'id' | 'name'>[];
 }
 
-export function MenuItemRow({ item, onUpdated, onDeleted }: MenuItemRowProps) {
-  const [isSoldOut, setIsSoldOut] = useState(item.is_sold_out_today);
-  const [isEditing, setIsEditing] = useState(false);
+export function MenuItemRow({ item, categories }: MenuItemRowProps) {
+  const [, startTransition] = useTransition();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+  });
 
-  const photo = item.menu_item_photos[0];
-  const formattedPrice = new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-  }).format(Number(item.price));
+  const [optimisticAvailable, setOptimisticAvailable] = useOptimistic(item.is_available);
+  const [optimisticSoldOut, setOptimisticSoldOut] = useOptimistic(
+    (item as Tables<'menu_items'> & { is_sold_out_today?: boolean }).is_sold_out_today ?? false,
+  );
 
-  async function handleToggleSoldOut() {
-    const newValue = !isSoldOut;
-    setIsSoldOut(newValue);
-    await toggleItemSoldOut(item.id, newValue);
-    onUpdated({ ...item, is_sold_out_today: newValue });
+  function handleToggleAvailable() {
+    startTransition(async () => {
+      setOptimisticAvailable(!optimisticAvailable);
+      await toggleMenuItemAvailable(item.id, !optimisticAvailable);
+    });
   }
 
-  async function handleDelete() {
-    if (!confirm(`¿Eliminar "${item.name}"?`)) return;
-    await deleteItem(item.id);
-    onDeleted(item.id);
+  function handleToggleSoldOut() {
+    startTransition(async () => {
+      setOptimisticSoldOut(!optimisticSoldOut);
+      await toggleMenuItemSoldOut(item.id, !optimisticSoldOut);
+    });
   }
+
+  function handleDelete() {
+    if (!confirm(`¿Eliminar "${item.name}"? Esta acción no se puede deshacer.`)) return;
+    startTransition(async () => { await deleteMenuItem(item.id); });
+  }
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
 
   return (
     <div
-      className={cn(
-        'flex items-center gap-3 px-4 py-3 transition-colors hover:bg-paper/50',
-        isSoldOut && 'opacity-60'
-      )}
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-3 rounded-lg border border-rule bg-paper px-4 py-3"
     >
-      {photo && (
-        <img
-          src={photo.url}
-          alt=""
-          className="h-10 w-10 shrink-0 rounded-md object-cover"
-          loading="lazy"
-        />
-      )}
-      {!photo && (
-        <div className="h-10 w-10 shrink-0 rounded-md bg-rule/40" aria-hidden="true" />
-      )}
+      <button
+        {...attributes}
+        {...listeners}
+        className="cursor-grab touch-none rounded p-0.5 text-muted hover:text-ink active:cursor-grabbing"
+        aria-label="Arrastrar para reordenar platillo"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          <p className="truncate text-sm font-medium font-sans text-ink">{item.name}</p>
-          {isSoldOut && (
-            <Badge variant="soldOut" className="shrink-0 text-[10px]">Agotado</Badge>
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-medium text-ink">{item.name}</span>
+          {item.is_special && (
+            <Badge variant="warning" className="shrink-0">
+              Especial
+            </Badge>
+          )}
+          {optimisticSoldOut && (
+            <Badge variant="destructive" className="shrink-0">
+              Agotado
+            </Badge>
           )}
         </div>
         {item.description && (
-          <p className="truncate text-xs font-sans text-muted">{item.description}</p>
+          <p className="mt-0.5 truncate text-xs text-muted">{item.description}</p>
         )}
       </div>
-      <span className="shrink-0 text-sm font-mono font-medium text-ink">
-        {formattedPrice}
-      </span>
-      <Toggle
-        pressed={isSoldOut}
-        onPressedChange={handleToggleSoldOut}
-        aria-label={isSoldOut ? 'Marcar disponible' : 'Marcar agotado'}
-        size="sm"
-        variant="outline"
-        className="text-[10px] px-2 h-7"
-      >
-        {isSoldOut ? 'Disponible' : 'Agotado'}
-      </Toggle>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 shrink-0"
-        aria-label={`Editar ${item.name}`}
-        onClick={() => setIsEditing(true)}
-      >
-        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
-        aria-label={`Eliminar ${item.name}`}
-        onClick={handleDelete}
-      >
-        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-      </Button>
-      {isEditing && (
-        <EditItemDialog
-          item={item}
-          onUpdated={(updated) => {
-            onUpdated(updated);
-            setIsEditing(false);
-          }}
-          onClose={() => setIsEditing(false)}
-        />
+
+      <span className="shrink-0 font-mono text-sm text-ink">{formatMXN(item.base_price)}</span>
+
+      {item.preparation_time_minutes && (
+        <span className="shrink-0 text-xs text-muted">{item.preparation_time_minutes} min</span>
       )}
+
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          onClick={handleToggleAvailable}
+          className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+            optimisticAvailable
+              ? 'bg-green/10 text-green hover:bg-green/20'
+              : 'bg-cream text-muted hover:bg-rule'
+          }`}
+          aria-label={optimisticAvailable ? 'Marcar como no disponible' : 'Marcar como disponible'}
+        >
+          {optimisticAvailable ? 'Disponible' : 'No disponible'}
+        </button>
+
+        <button
+          onClick={handleToggleSoldOut}
+          className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+            optimisticSoldOut
+              ? 'bg-red-100 text-red-600 hover:bg-red-200'
+              : 'bg-cream text-muted hover:bg-rule'
+          }`}
+          aria-label={optimisticSoldOut ? 'Marcar como disponible' : 'Marcar como agotado'}
+        >
+          {optimisticSoldOut ? 'Agotado' : 'En stock'}
+        </button>
+
+        <EditItemDialog item={item} categories={categories} />
+
+        <button
+          onClick={handleDelete}
+          className="rounded p-1.5 text-muted transition-colors hover:bg-red-50 hover:text-red-600"
+          aria-label={`Eliminar ${item.name}`}
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }

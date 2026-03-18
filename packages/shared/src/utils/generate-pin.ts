@@ -1,7 +1,7 @@
-export function generatePin(): string {
-  return Math.floor(1000 + Math.random() * 9000).toString();
-}
-
-export function generateOtp(): string {
-  return Math.floor(1000 + Math.random() * 9000).toString();
+export function generatePin(length = 4): string {
+  const digits = new Uint32Array(length);
+  crypto.getRandomValues(digits);
+  return Array.from(digits)
+    .map((n) => n % 10)
+    .join('');
 }

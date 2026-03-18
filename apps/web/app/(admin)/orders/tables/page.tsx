@@ -1,52 +1,46 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
+import { ChevronLeft } from 'lucide-react';
+import { requireAdminSession } from '@/lib/auth/get-session';
 import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
 import { TableEditor } from './TableEditor';
 
-export const metadata: Metadata = { title: 'Mesas — MenuOS Admin' };
+export const metadata: Metadata = { title: 'Mesas' };
 
 export default async function TablesPage() {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/auth/login');
+  const [{ data: tables }, { data: branches }] = await Promise.all([
+    supabase
+      .from('restaurant_tables')
+      .select('*')
+      .eq('organization_id', org.id)
+      .order('name'),
+    supabase
+      .from('branches')
+      .select('id, name')
+      .eq('organization_id', org.id)
+      .eq('is_active', true),
+  ]);
 
-  const { data: staffUser } = await supabase
-    .from('staff_users')
-    .select('organization_id')
-    .eq('auth_user_id', user.id)
-    .single();
-  if (!staffUser) redirect('/auth/login');
-
-  const { data: branches } = await supabase
-    .from('branches')
-    .select('id, name')
-    .eq('organization_id', staffUser.organization_id)
-    .eq('is_active', true)
-    .is('deleted_at', null)
-    .order('created_at');
-
-  const { data: tables } = await supabase
-    .from('restaurant_tables')
-    .select('id, branch_id, number, label, zone, capacity, is_active, qr_token')
-    .eq('organization_id', staffUser.organization_id)
-    .is('deleted_at', null)
-    .order('number');
-
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('slug')
-    .eq('id', staffUser.organization_id)
-    .single();
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://menuos.mx';
 
   return (
-    <div>
-      <h1 className="mb-6 font-display text-2xl font-bold text-ink">Mesas</h1>
+    <div className="p-4 lg:p-6">
+      <Link
+        href="/orders"
+        className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Volver a pedidos
+      </Link>
+      <h1 className="mb-6 font-display text-2xl font-bold text-ink">Gestión de mesas</h1>
       <TableEditor
-        branches={branches ?? []}
         tables={tables ?? []}
-        orgId={staffUser.organization_id}
-        orgSlug={org?.slug ?? ''}
+        branches={branches ?? []}
+        baseUrl={baseUrl}
+        orgSlug={org.slug}
       />
     </div>
   );

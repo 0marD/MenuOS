@@ -1,34 +1,31 @@
 import type { Metadata } from 'next';
+import { requireAdminSession } from '@/lib/auth/get-session';
 import { createClient } from '@/lib/supabase/server';
 import { MenuEditor } from './components/MenuEditor';
 
-export const metadata: Metadata = {
-  title: 'Menú — MenuOS Admin',
-};
+export const metadata: Metadata = { title: 'Menú' };
 
 export default async function MenuPage() {
+  const { org } = await requireAdminSession();
   const supabase = await createClient();
 
   const { data: categories } = await supabase
     .from('menu_categories')
-    .select(`
-      *,
-      menu_items (
-        *,
-        menu_item_photos ( url, position ),
-        menu_item_filters ( filter )
-      )
-    `)
+    .select('*, menu_items(*)')
+    .eq('organization_id', org.id)
     .is('deleted_at', null)
-    .order('sort_order')
-    .order('sort_order', { referencedTable: 'menu_items' });
+    .order('sort_order');
+
+  const normalizedCategories = (categories ?? []).map((cat) => ({
+    ...cat,
+    menu_items: (cat.menu_items ?? [])
+      .filter((item) => item.deleted_at === null)
+      .sort((a, b) => a.sort_order - b.sort_order),
+  }));
 
   return (
-    <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold text-ink">Menú</h1>
-      </div>
-      <MenuEditor categories={categories ?? []} />
+    <div className="p-4 lg:p-6">
+      <MenuEditor categories={normalizedCategories} />
     </div>
   );
 }

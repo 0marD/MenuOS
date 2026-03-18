@@ -1,19 +1,30 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus } from 'lucide-react';
-import { Button } from '@menuos/ui/atoms/Button';
-import { CategorySection } from './CategorySection';
+import { useState, useTransition } from 'react';
+import { LayoutList } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { restrictToVerticalAxis, restrictToParentElement } from '@dnd-kit/modifiers';
+import type { Tables } from '@menuos/database';
 import { CreateCategoryDialog } from './CreateCategoryDialog';
-import type { Tables } from '@menuos/database/types';
-
-type MenuItemWithRelations = Tables<'menu_items'> & {
-  menu_item_photos: Array<{ url: string; position: number }>;
-  menu_item_filters: Array<{ filter: string }>;
-};
+import { SortableCategorySection } from './CategorySection';
+import { reorderCategories } from '../actions';
 
 type CategoryWithItems = Tables<'menu_categories'> & {
-  menu_items: MenuItemWithRelations[];
+  menu_items: Tables<'menu_items'>[];
 };
 
 interface MenuEditorProps {
@@ -22,73 +33,79 @@ interface MenuEditorProps {
 
 export function MenuEditor({ categories: initialCategories }: MenuEditorProps) {
   const [categories, setCategories] = useState(initialCategories);
-  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [, startTransition] = useTransition();
 
-  function handleCategoryCreated(category: Tables<'menu_categories'>) {
-    setCategories((prev) => [
-      ...prev,
-      { ...category, menu_items: [] },
-    ]);
-    setIsCreatingCategory(false);
-  }
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
-  function handleCategoryUpdated(updated: Tables<'menu_categories'>) {
-    setCategories((prev) =>
-      prev.map((cat) =>
-        cat.id === updated.id ? { ...cat, ...updated } : cat
-      )
-    );
-  }
+  const totalItems = categories.reduce((sum, cat) => sum + cat.menu_items.length, 0);
+  const allCategories = categories.map((cat) => ({ id: cat.id, name: cat.name }));
 
-  function handleCategoryDeleted(id: string) {
-    setCategories((prev) => prev.filter((cat) => cat.id !== id));
-  }
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
 
-  if (categories.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-rule py-16 text-center">
-        <p className="text-sm font-sans text-muted">Tu menú está vacío</p>
-        <p className="mt-1 text-xs font-sans text-muted">Empieza creando una categoría</p>
-        <Button
-          className="mt-4"
-          onClick={() => setIsCreatingCategory(true)}
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Nueva categoría
-        </Button>
-        {isCreatingCategory && (
-          <CreateCategoryDialog
-            onCreated={handleCategoryCreated}
-            onClose={() => setIsCreatingCategory(false)}
-          />
-        )}
-      </div>
-    );
+    const oldIndex = categories.findIndex((c) => c.id === active.id);
+    const newIndex = categories.findIndex((c) => c.id === over.id);
+    const reordered = arrayMove(categories, oldIndex, newIndex);
+
+    setCategories(reordered);
+    startTransition(async () => {
+      await reorderCategories(reordered.map((c) => c.id));
+    });
   }
 
   return (
-    <div className="space-y-4">
-      {categories.map((category) => (
-        <CategorySection
-          key={category.id}
-          category={category}
-          onUpdated={handleCategoryUpdated}
-          onDeleted={handleCategoryDeleted}
-        />
-      ))}
-      <Button
-        variant="outline"
-        className="w-full"
-        onClick={() => setIsCreatingCategory(true)}
-      >
-        <Plus className="h-4 w-4" aria-hidden="true" />
-        Nueva categoría
-      </Button>
-      {isCreatingCategory && (
-        <CreateCategoryDialog
-          onCreated={handleCategoryCreated}
-          onClose={() => setIsCreatingCategory(false)}
-        />
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <LayoutList className="h-5 w-5 text-muted" />
+          <div>
+            <h1 className="font-display text-2xl font-bold text-ink">Menú</h1>
+            <p className="text-sm text-muted">
+              {categories.length} {categories.length === 1 ? 'categoría' : 'categorías'} ·{' '}
+              {totalItems} {totalItems === 1 ? 'platillo' : 'platillos'}
+            </p>
+          </div>
+        </div>
+        <CreateCategoryDialog />
+      </div>
+
+      {categories.length === 0 ? (
+        <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-rule py-16 text-center">
+          <LayoutList className="h-10 w-10 text-muted" />
+          <div>
+            <p className="font-medium text-ink">Todavía no tienes categorías</p>
+            <p className="mt-1 text-sm text-muted">
+              Crea tu primera categoría para comenzar a armar tu menú.
+            </p>
+          </div>
+          <CreateCategoryDialog />
+        </div>
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+          modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+        >
+          <SortableContext
+            items={categories.map((c) => c.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="flex flex-col gap-4">
+              {categories.map((category) => (
+                <SortableCategorySection
+                  key={category.id}
+                  category={category}
+                  allCategories={allCategories}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
     </div>
   );

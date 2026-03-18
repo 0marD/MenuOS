@@ -1,37 +1,62 @@
--- Migration: organizations
--- Phase 0.10
+-- Organizations and supporting tables
 
-create extension if not exists "pgcrypto";
-
-create table public.organizations (
-  id                   uuid primary key default gen_random_uuid(),
-  name                 text not null,
-  slug                 text not null unique,
-  logo_url             text,
-  banner_url           text,
-  colors               jsonb,
-  plan                 text not null default 'starter' check (plan in ('starter','pro','business')),
-  subscription_status  text not null default 'trialing' check (subscription_status in ('active','trialing','past_due','cancelled')),
-  stripe_customer_id   text,
-  trial_ends_at        timestamptz default (now() + interval '14 days'),
-  deleted_at           timestamptz,
-  created_at           timestamptz not null default now(),
-  updated_at           timestamptz not null default now()
+CREATE TABLE design_templates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  preview_url TEXT,
+  config JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-create unique index organizations_slug_idx on public.organizations (slug) where deleted_at is null;
+CREATE TABLE organizations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  logo_url TEXT,
+  banner_url TEXT,
+  primary_color TEXT DEFAULT '#D4500A',
+  secondary_color TEXT DEFAULT '#0F0E0C',
+  template_id UUID REFERENCES design_templates(id) ON DELETE SET NULL,
+  plan TEXT NOT NULL DEFAULT 'starter'
+    CHECK (plan IN ('starter', 'pro', 'business')),
+  subscription_status TEXT NOT NULL DEFAULT 'trialing'
+    CHECK (subscription_status IN ('active', 'trialing', 'past_due', 'canceled', 'inactive')),
+  subscription_id TEXT,
+  trial_ends_at TIMESTAMPTZ DEFAULT (now() + INTERVAL '14 days'),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
-alter table public.organizations enable row level security;
+CREATE TABLE org_settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  key TEXT NOT NULL,
+  value JSONB,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, key)
+);
 
--- Trigger: updated_at
-create or replace function public.set_updated_at()
-returns trigger language plpgsql as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
+CREATE TABLE org_texts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  key TEXT NOT NULL,
+  value TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, key)
+);
 
-create trigger organizations_updated_at
-  before update on public.organizations
-  for each row execute function public.set_updated_at();
+-- updated_at trigger
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER organizations_updated_at
+  BEFORE UPDATE ON organizations
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Indexes
+CREATE INDEX idx_organizations_slug ON organizations(slug);

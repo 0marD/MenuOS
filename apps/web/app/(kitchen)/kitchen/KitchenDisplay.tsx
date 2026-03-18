@@ -1,195 +1,166 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { CheckCheck } from 'lucide-react';
+import { useCallback, useEffect, useRef, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCheck, AlertTriangle } from 'lucide-react';
-import { cn } from '@menuos/ui';
 import { createClient } from '@/lib/supabase/client';
-import { markItemReady, markTicketReady } from './actions';
+import { KDS_ALERT_MINUTES } from '@menuos/shared';
+import type { Tables } from '@menuos/database';
+import { markItemReady, markOrderReadyKitchen, startPreparing } from './actions';
 
-interface OrderItem {
-  id: string;
-  name: string;
-  quantity: number;
-  notes: string | null;
-  is_ready: boolean;
+type Order = Tables<'orders'> & { order_items: Tables<'order_items'>[] };
+
+function minutesSince(iso: string) {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
 }
 
-interface Order {
-  id: string;
-  table_number: number | null;
-  status: string;
-  round: number;
-  created_at: string;
-  notes: string | null;
-  customer_name: string | null;
-  order_items: OrderItem[];
+function playNewOrderBeep() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    gain.gain.setValueAtTime(0.4, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.4);
+  } catch {
+    // AudioContext not available (SSR or restricted environment)
+  }
 }
 
 interface KitchenDisplayProps {
-  orders: Order[];
-  orgId: string;
+  initialOrders: Order[];
+  branchId: string;
 }
 
-function ElapsedTimer({ createdAt }: { createdAt: string }) {
-  const [mins, setMins] = useState(() =>
-    Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000)
-  );
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMins(Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000));
-    }, 30_000);
-    return () => clearInterval(interval);
-  }, [createdAt]);
-
-  return (
-    <span className={cn('font-mono text-xl font-bold tabular-nums', mins >= 15 ? 'text-red-400' : 'text-white/70')}>
-      {mins}m
-    </span>
-  );
-}
-
-export function KitchenDisplay({ orders, orgId }: KitchenDisplayProps) {
+export function KitchenDisplay({ initialOrders, branchId }: KitchenDisplayProps) {
+  const [, startTransition] = useTransition();
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const knownOrderIds = useRef(new Set(initialOrders.map((o) => o.id)));
 
-  // Realtime
+  const refresh = useCallback(() => router.refresh(), [router]);
+
+  const handleOrderChange = useCallback(
+    (payload: { eventType: string; new: Record<string, unknown> }) => {
+      if (payload.eventType === 'INSERT' && payload.new?.id) {
+        const newId = payload.new.id as string;
+        if (!knownOrderIds.current.has(newId)) {
+          knownOrderIds.current.add(newId);
+          playNewOrderBeep();
+        }
+      }
+      refresh();
+    },
+    [refresh],
+  );
+
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
-      .channel(`kitchen:${orgId}`)
+      .channel(`kitchen:${branchId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders', filter: `organization_id=eq.${orgId}` },
-        () => startTransition(() => router.refresh())
+        { event: '*', schema: 'public', table: 'orders', filter: `branch_id=eq.${branchId}` },
+        handleOrderChange,
       )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'order_items' },
-        () => startTransition(() => router.refresh())
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, refresh)
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
-  }, [orgId, router]);
+  }, [branchId, handleOrderChange, refresh]);
+
+  const orders = initialOrders.filter((o) => ['confirmed', 'preparing'].includes(o.status));
 
   if (orders.length === 0) {
     return (
-      <div className="flex min-h-[calc(100vh-40px)] items-center justify-center">
-        <div className="text-center">
-          <CheckCheck className="mx-auto mb-4 h-16 w-16 text-green/40" aria-hidden="true" />
-          <p className="font-display text-3xl font-bold text-white/30">Al día</p>
-          <p className="mt-2 font-mono text-sm text-white/20">Sin tickets pendientes</p>
-        </div>
+      <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
+        <CheckCheck className="h-16 w-16 text-green-500/40" />
+        <p className="font-display text-2xl font-bold text-white/40">Sin pedidos pendientes</p>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid auto-rows-min gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {orders.map((order) => {
-        const mins = Math.floor(
-          (Date.now() - new Date(order.created_at).getTime()) / 60000
-        );
-        const isOverdue = mins >= 15;
+        const mins = minutesSince(order.created_at);
+        const overdue = mins >= KDS_ALERT_MINUTES;
         const allReady = order.order_items.every((i) => i.is_ready);
 
         return (
-          <article
+          <div
             key={order.id}
-            className={cn(
-              'flex flex-col rounded-2xl border-2 p-4',
-              isOverdue
-                ? 'animate-pulse border-red-500 bg-red-950/30'
-                : 'border-white/10 bg-zinc-900'
-            )}
+            className={`flex flex-col rounded-xl border-2 bg-neutral-900 ${
+              overdue ? 'border-red-500' : allReady ? 'border-green-500' : 'border-neutral-700'
+            }`}
           >
-            {/* Ticket header */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="font-display text-4xl font-black text-white">
-                  {order.table_number ?? '?'}
-                </span>
-                <div>
-                  <p className="text-xs font-mono text-white/40 uppercase">Mesa</p>
-                  {order.round > 1 && (
-                    <p className="text-xs font-mono text-white/40">Ronda {order.round}</p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {isOverdue && (
-                  <AlertTriangle className="h-5 w-5 text-red-400" aria-label="Tiempo excedido" />
-                )}
-                <ElapsedTimer createdAt={order.created_at} />
-              </div>
+            {/* Header */}
+            <div
+              className={`flex items-center justify-between rounded-t-[10px] px-4 py-2 ${
+                overdue ? 'bg-red-500' : allReady ? 'bg-green-600' : 'bg-neutral-700'
+              }`}
+            >
+              <span className="font-mono text-sm font-bold text-white">
+                #{order.id.slice(-6).toUpperCase()}
+              </span>
+              <span className={`font-mono text-sm font-bold text-white ${overdue ? 'animate-pulse' : ''}`}>
+                {mins}m
+              </span>
             </div>
 
-            {order.notes && (
-              <p className="mt-2 rounded bg-white/5 px-2 py-1 text-sm italic text-white/60">
-                ⚠ {order.notes}
-              </p>
-            )}
-
             {/* Items */}
-            <ul className="mt-4 flex-1 space-y-2" aria-label="Platillos">
+            <ul className="flex-1 divide-y divide-neutral-800 px-4">
               {order.order_items.map((item) => (
-                <li
-                  key={item.id}
-                  className={cn(
-                    'flex items-start justify-between gap-3 rounded-lg px-3 py-2 transition-all',
-                    item.is_ready ? 'bg-green/10 opacity-50' : 'bg-white/5'
-                  )}
-                >
+                <li key={item.id} className="flex items-center gap-3 py-3">
+                  <button
+                    onClick={() => startTransition(async () => { await markItemReady(item.id); })}
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                      item.is_ready
+                        ? 'border-green-500 bg-green-500'
+                        : 'border-neutral-500 hover:border-green-400'
+                    }`}
+                    aria-label={`Marcar ${item.name} como listo`}
+                  >
+                    {item.is_ready && <CheckCheck className="h-3.5 w-3.5 text-white" />}
+                  </button>
                   <div className="min-w-0 flex-1">
-                    <p className={cn(
-                      'text-lg font-bold leading-tight',
-                      item.is_ready ? 'text-green line-through' : 'text-white'
-                    )}>
+                    <p className={`text-sm font-medium ${item.is_ready ? 'text-neutral-500 line-through' : 'text-white'}`}>
                       {item.quantity}× {item.name}
                     </p>
                     {item.notes && (
-                      <p className="text-sm text-yellow-400 italic">{item.notes}</p>
+                      <p className="text-xs text-yellow-400">{item.notes}</p>
                     )}
                   </div>
-                  {!item.is_ready && (
-                    <button
-                      onClick={() =>
-                        startTransition(() =>
-                          markItemReady(item.id, order.id).then(() => router.refresh())
-                        )
-                      }
-                      disabled={isPending}
-                      className="shrink-0 rounded-lg bg-green px-3 py-1 text-sm font-bold text-white transition hover:bg-green/80 disabled:opacity-50"
-                      aria-label={`Marcar ${item.name} como listo`}
-                    >
-                      ✓
-                    </button>
-                  )}
                 </li>
               ))}
             </ul>
 
-            {/* Mark full ticket ready */}
-            <button
-              onClick={() =>
-                startTransition(() =>
-                  markTicketReady(order.id).then(() => router.refresh())
-                )
-              }
-              disabled={isPending}
-              className={cn(
-                'mt-4 w-full rounded-xl py-3 text-base font-bold transition',
-                allReady
-                  ? 'bg-green text-white hover:bg-green/80'
-                  : 'bg-white/10 text-white/60 hover:bg-white/20'
+            {/* Footer */}
+            <div className="px-4 pb-4">
+              {order.status === 'confirmed' ? (
+                <button
+                  onClick={() => startTransition(async () => { await startPreparing(order.id); })}
+                  className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700"
+                >
+                  Comenzar preparación
+                </button>
+              ) : allReady ? (
+                <button
+                  onClick={() => startTransition(async () => { await markOrderReadyKitchen(order.id); })}
+                  className="w-full rounded-lg bg-green-600 py-2.5 text-sm font-bold text-white hover:bg-green-700"
+                >
+                  ✓ Listo para mesa
+                </button>
+              ) : (
+                <p className="py-1 text-center text-xs text-neutral-500">
+                  Preparando…
+                </p>
               )}
-              aria-label="Marcar ticket completo como listo"
-            >
-              {allReady ? '✓ Ticket listo — Notificar mesero' : 'Marcar todo como listo'}
-            </button>
-          </article>
+            </div>
+          </div>
         );
       })}
     </div>

@@ -1,60 +1,51 @@
-'use server';
-
 import { createClient } from '@/lib/supabase/server';
-import type { UserRole } from '@menuos/shared/constants';
+import type { Tables } from '@menuos/database';
+
+export type StaffUser = Tables<'staff_users'>;
+export type Organization = Tables<'organizations'>;
 
 export interface AuthSession {
-  userId: string;
-  orgId: string;
-  role: UserRole;
+  authId: string;
+  staffUser: StaffUser;
+  org: Organization;
 }
 
-/**
- * Validates the current server session and returns org + role.
- * Throws if the user is not authenticated or has no staff record.
- * Use this at the start of every sensitive server action.
- */
-export async function requireAuthSession(): Promise<AuthSession> {
+export async function getSession(): Promise<AuthSession | null> {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+  if (!user) return null;
 
-  if (authError || !user) {
-    throw new Error('Unauthorized');
-  }
-
-  const { data: staffUser, error: staffError } = await supabase
+  const { data: staffUser } = await supabase
     .from('staff_users')
-    .select('organization_id, role')
-    .eq('auth_user_id', user.id)
+    .select('*')
+    .eq('auth_id', user.id)
     .eq('is_active', true)
-    .is('deleted_at', null)
     .single();
 
-  if (staffError || !staffUser) {
-    throw new Error('Unauthorized');
-  }
+  if (!staffUser) return null;
 
-  return {
-    userId: user.id,
-    orgId: staffUser.organization_id,
-    role: staffUser.role as UserRole,
-  };
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('*')
+    .eq('id', staffUser.organization_id)
+    .single();
+
+  if (!org) return null;
+
+  return { authId: user.id, staffUser, org };
 }
 
-/**
- * Like requireAuthSession but also asserts the caller belongs to the expected org.
- * Prevents privilege escalation via org ID manipulation.
- */
-export async function requireOrgSession(expectedOrgId: string): Promise<AuthSession> {
-  const session = await requireAuthSession();
+export async function requireAuthSession(): Promise<AuthSession> {
+  const session = await getSession();
+  if (!session) throw new Error('Unauthorized');
+  return session;
+}
 
-  if (session.orgId !== expectedOrgId) {
+export async function requireAdminSession(): Promise<AuthSession> {
+  const session = await requireAuthSession();
+  if (!['super_admin', 'manager'].includes(session.staffUser.role)) {
     throw new Error('Forbidden');
   }
-
   return session;
 }

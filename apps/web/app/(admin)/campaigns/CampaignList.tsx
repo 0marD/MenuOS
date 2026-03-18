@@ -1,140 +1,145 @@
 'use client';
 
+import { Plus, Send, Trash2 } from 'lucide-react';
 import Link from 'next/link';
-import { Badge } from '@menuos/ui/atoms/Badge';
-import { MessageCircle, Clock, CheckCheck, Send, AlertCircle } from 'lucide-react';
-import { cn } from '@menuos/ui';
+import { useTransition } from 'react';
+import { Badge, Button } from '@menuos/ui';
+import type { Tables } from '@menuos/database';
+import { deleteCampaign, sendCampaign } from './actions';
 
-interface Campaign {
-  id: string;
-  name: string;
-  status: string;
-  segment: string | null;
-  scheduled_at: string | null;
-  sent_at: string | null;
-  total_sent: number;
-  total_delivered: number;
-  total_read: number;
-  created_at: string;
-}
+type Campaign = Tables<'campaigns'> & {
+  campaign_analytics: Tables<'campaign_analytics'> | Tables<'campaign_analytics'>[] | null;
+};
+
+const STATUS_VARIANT: Record<string, 'default' | 'success' | 'muted' | 'warning'> = {
+  draft: 'muted',
+  scheduled: 'warning',
+  sending: 'default',
+  sent: 'success',
+  cancelled: 'muted',
+} as const;
+
+const STATUS_LABEL: Record<string, string> = {
+  draft: 'Borrador',
+  scheduled: 'Programada',
+  sending: 'Enviando',
+  sent: 'Enviada',
+  cancelled: 'Cancelada',
+};
 
 interface CampaignListProps {
   campaigns: Campaign[];
 }
 
-const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive'; Icon: React.ElementType }> = {
-  draft: { label: 'Borrador', variant: 'outline', Icon: MessageCircle },
-  scheduled: { label: 'Programada', variant: 'secondary', Icon: Clock },
-  sending: { label: 'Enviando', variant: 'secondary', Icon: Send },
-  sent: { label: 'Enviada', variant: 'default', Icon: CheckCheck },
-  failed: { label: 'Error', variant: 'destructive', Icon: AlertCircle },
-};
-
-const SEGMENT_LABELS: Record<string, string> = {
-  all: 'Todos',
-  new: 'Nuevos',
-  frequent: 'Frecuentes',
-  dormant: 'Dormidos',
-};
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '—';
-  return new Intl.DateTimeFormat('es-MX', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(iso));
-}
-
-function deliveryRate(sent: number, delivered: number): string {
-  if (sent === 0) return '—';
-  return `${Math.round((delivered / sent) * 100)}%`;
-}
-
-function readRate(delivered: number, read: number): string {
-  if (delivered === 0) return '—';
-  return `${Math.round((read / delivered) * 100)}%`;
-}
-
 export function CampaignList({ campaigns }: CampaignListProps) {
-  if (campaigns.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-rule py-20 text-center">
-        <MessageCircle className="mb-3 h-8 w-8 text-muted" aria-hidden="true" />
-        <p className="font-display text-base font-medium text-ink">Sin campañas aún</p>
-        <p className="mt-1 text-sm font-sans text-muted">
-          Crea tu primera campaña para reconectar con tus clientes por WhatsApp.
-        </p>
-      </div>
-    );
+  const [isPending, startTransition] = useTransition();
+
+  function handleDelete(id: string, name: string) {
+    if (!confirm(`¿Eliminar la campaña "${name}"?`)) return;
+    startTransition(async () => { await deleteCampaign(id); });
+  }
+
+  function handleSend(id: string, name: string) {
+    if (!confirm(`¿Enviar la campaña "${name}" ahora? Esta acción no se puede deshacer.`)) return;
+    startTransition(async () => {
+      const res = await sendCampaign(id);
+      if (res?.error) alert(res.error);
+    });
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      {campaigns.map((campaign) => {
-        const config = STATUS_CONFIG[campaign.status] ?? STATUS_CONFIG.draft!;
-        const StatusIcon = config.Icon;
-        const isSent = campaign.status === 'sent';
-
-        return (
-          <Link
-            key={campaign.id}
-            href={`/admin/campaigns/${campaign.id}`}
-            className="group block rounded-xl border border-rule bg-card p-4 transition-all hover:border-accent hover:shadow-sm"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="truncate font-sans font-medium text-ink group-hover:text-accent">
-                    {campaign.name}
-                  </p>
-                  <Badge variant={config.variant} className="shrink-0">
-                    <StatusIcon className="mr-1 h-3 w-3" aria-hidden="true" />
-                    {config.label}
-                  </Badge>
-                </div>
-                <div className="mt-1 flex items-center gap-3 text-xs font-sans text-muted">
-                  {campaign.segment && (
-                    <span>Segmento: {SEGMENT_LABELS[campaign.segment] ?? campaign.segment}</span>
-                  )}
-                  {campaign.scheduled_at && campaign.status === 'scheduled' && (
-                    <span>Programada: {formatDate(campaign.scheduled_at)}</span>
-                  )}
-                  {campaign.sent_at && (
-                    <span>Enviada: {formatDate(campaign.sent_at)}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Analytics row — only for sent campaigns */}
-            {isSent && (
-              <div className={cn(
-                'mt-3 grid grid-cols-3 gap-2 rounded-lg border border-rule bg-cream p-3'
-              )}>
-                <div className="text-center">
-                  <p className="text-lg font-bold font-display text-ink">{campaign.total_sent}</p>
-                  <p className="text-xs font-sans text-muted">Enviados</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-bold font-display text-ink">
-                    {deliveryRate(campaign.total_sent, campaign.total_delivered)}
-                  </p>
-                  <p className="text-xs font-sans text-muted">Entregados</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-bold font-display text-accent">
-                    {readRate(campaign.total_delivered, campaign.total_read)}
-                  </p>
-                  <p className="text-xs font-sans text-muted">Leídos</p>
-                </div>
-              </div>
-            )}
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted">{campaigns.length} campañas</p>
+        <Button asChild size="sm" className="gap-1.5">
+          <Link href="/campaigns/new">
+            <Plus className="h-4 w-4" />
+            Nueva campaña
           </Link>
-        );
-      })}
+        </Button>
+      </div>
+
+      {campaigns.length === 0 ? (
+        <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-rule py-16 text-center">
+          <p className="font-medium text-ink">Todavía no hay campañas</p>
+          <p className="text-sm text-muted">Crea tu primera campaña de WhatsApp.</p>
+          <Button asChild>
+            <Link href="/campaigns/new">
+              <Plus className="mr-1.5 h-4 w-4" />
+              Nueva campaña
+            </Link>
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {campaigns.map((campaign) => {
+            const analytics = Array.isArray(campaign.campaign_analytics)
+              ? campaign.campaign_analytics[0]
+              : campaign.campaign_analytics;
+
+            const sentPct =
+              analytics && analytics.total_sent > 0
+                ? Math.round((analytics.total_read / analytics.total_sent) * 100)
+                : 0;
+
+            return (
+              <div
+                key={campaign.id}
+                className="rounded-xl border border-rule bg-paper px-5 py-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-ink">{campaign.name}</p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      Segmento: {campaign.segment} · {campaign.total_recipients} destinatarios
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge variant={STATUS_VARIANT[campaign.status] ?? 'muted'}>
+                      {STATUS_LABEL[campaign.status] ?? campaign.status}
+                    </Badge>
+                    {campaign.status === 'draft' && (
+                      <>
+                        <button
+                          onClick={() => handleSend(campaign.id, campaign.name)}
+                          disabled={isPending}
+                          className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-accent hover:bg-accent/10 disabled:opacity-50"
+                          aria-label={`Enviar ${campaign.name}`}
+                        >
+                          <Send className="h-3.5 w-3.5" />
+                          Enviar
+                        </button>
+                        <button
+                          onClick={() => handleDelete(campaign.id, campaign.name)}
+                          className="rounded p-1 text-muted hover:bg-red-50 hover:text-red-600"
+                          aria-label={`Eliminar ${campaign.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {analytics && analytics.total_sent > 0 && (
+                  <div className="mt-3">
+                    <div className="mb-1 flex justify-between text-xs text-muted">
+                      <span>{analytics.total_sent} enviados</span>
+                      <span>{analytics.total_read} leídos ({sentPct}%)</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-cream">
+                      <div
+                        className="h-full rounded-full bg-accent"
+                        style={{ width: `${sentPct}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

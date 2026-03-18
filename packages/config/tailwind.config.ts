@@ -1,6 +1,7 @@
 import type { Config } from 'tailwindcss';
 
 const config: Omit<Config, 'content'> = {
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
@@ -9,57 +10,31 @@ const config: Omit<Config, 'content'> = {
         cream: '#EDE8DC',
         accent: {
           DEFAULT: '#D4500A',
-          foreground: '#F5F0E8',
+          green: '#2A6B3F',
+          blue: '#1A3A5C',
         },
-        green: {
-          DEFAULT: '#2A6B3F',
-          foreground: '#F5F0E8',
-        },
-        blue: {
-          DEFAULT: '#1A3A5C',
-          foreground: '#F5F0E8',
-        },
-        muted: {
-          DEFAULT: '#7A7060',
-          foreground: '#F5F0E8',
-        },
+        muted: '#7A7060',
         highlight: '#F7C948',
         rule: '#C8BFA8',
-        // shadcn/ui compatible tokens
-        background: '#F5F0E8',
-        foreground: '#0F0E0C',
-        card: {
-          DEFAULT: '#EDE8DC',
-          foreground: '#0F0E0C',
-        },
-        primary: {
-          DEFAULT: '#D4500A',
-          foreground: '#F5F0E8',
-        },
-        secondary: {
-          DEFAULT: '#EDE8DC',
-          foreground: '#0F0E0C',
-        },
-        destructive: {
-          DEFAULT: '#DC2626',
-          foreground: '#F5F0E8',
-        },
-        border: '#C8BFA8',
-        input: '#C8BFA8',
-        ring: '#D4500A',
       },
       fontFamily: {
-        display: ['var(--font-playfair)', 'Georgia', 'serif'],
-        sans: ['var(--font-dm-sans)', 'system-ui', 'sans-serif'],
-        mono: ['var(--font-dm-mono)', 'Menlo', 'monospace'],
+        display: ['"Playfair Display"', 'Georgia', 'serif'],
+        sans: ['"DM Sans"', 'system-ui', 'sans-serif'],
+        mono: ['"DM Mono"', '"Fira Code"', 'monospace'],
+      },
+      fontSize: {
+        kds: ['24px', { lineHeight: '1.3' }],
       },
       borderRadius: {
-        lg: '0.75rem',
-        md: '0.5rem',
-        sm: '0.375rem',
+        DEFAULT: '3px',
+        sm: '2px',
+        md: '4px',
+        lg: '6px',
+        xl: '8px',
       },
     },
   },
+  plugins: [],
 };
 
 export default config;

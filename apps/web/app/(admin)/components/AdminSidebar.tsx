@@ -4,12 +4,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   BookOpen,
-  Building2,
   ChevronDown,
   LayoutDashboard,
   LogOut,
   MessageSquare,
-  Plug,
   QrCode,
   Settings,
   ShoppingBag,
@@ -50,6 +48,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Sucursales', href: '/settings/branches' },
       { label: 'Horarios', href: '/settings/schedules' },
       { label: 'Equipo', href: '/settings/team' },
+      { label: 'Plantillas WA', href: '/settings/templates' },
       { label: 'Integraciones', href: '/settings/integrations' },
       { label: 'Facturación', href: '/settings/billing', superAdminOnly: true },
     ],

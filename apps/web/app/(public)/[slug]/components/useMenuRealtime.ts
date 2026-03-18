@@ -1,13 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
-type RealtimeCallback = () => void;
-
-export function useMenuRealtime(orgId: string, onUpdate: RealtimeCallback) {
-  const callbackRef = useRef(onUpdate);
-  callbackRef.current = onUpdate;
+export function useMenuRealtime(orgId: string, onUpdate: () => void) {
+  const router = useRouter();
 
   useEffect(() => {
     const supabase = createClient();
@@ -19,25 +17,31 @@ export function useMenuRealtime(orgId: string, onUpdate: RealtimeCallback) {
         {
           event: '*',
           schema: 'public',
-          table: 'menu_categories',
+          table: 'menu_items',
           filter: `organization_id=eq.${orgId}`,
         },
-        () => callbackRef.current()
+        () => {
+          onUpdate();
+          router.refresh();
+        },
       )
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'menu_items',
+          table: 'menu_categories',
           filter: `organization_id=eq.${orgId}`,
         },
-        () => callbackRef.current()
+        () => {
+          onUpdate();
+          router.refresh();
+        },
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [orgId]);
+  }, [orgId, onUpdate, router]);
 }
