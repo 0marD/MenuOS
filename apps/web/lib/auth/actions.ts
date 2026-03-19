@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/service';
 import { generateSlug } from '@menuos/shared';
 import type { LoginInput, RegisterInput } from '@menuos/shared';
 
@@ -34,9 +35,12 @@ export async function register(data: RegisterInput) {
     return { error: signUpError?.message ?? 'Error al crear la cuenta.' };
   }
 
+  // Use admin client to bypass RLS: the new user has no staff_users record yet,
+  // so auth_org_id() returns NULL and all RLS policies would block the inserts.
+  const admin = createAdminClient();
   const slug = generateSlug(data.restaurantName);
 
-  const { data: org, error: orgError } = await supabase
+  const { data: org, error: orgError } = await admin
     .from('organizations')
     .insert({
       name: data.restaurantName,
@@ -46,10 +50,10 @@ export async function register(data: RegisterInput) {
     .single();
 
   if (orgError || !org) {
-    return { error: 'Error al crear el restaurante. Intenta de nuevo.' };
+    return { error: orgError?.message ?? 'Error al crear el restaurante. Intenta de nuevo.' };
   }
 
-  const { error: staffError } = await supabase.from('staff_users').insert({
+  const { error: staffError } = await admin.from('staff_users').insert({
     auth_id: authData.user.id,
     organization_id: org.id,
     name: data.name,
@@ -59,7 +63,7 @@ export async function register(data: RegisterInput) {
   });
 
   if (staffError) {
-    return { error: 'Error al configurar el perfil.' };
+    return { error: staffError.message ?? 'Error al configurar el perfil.' };
   }
 
   revalidatePath('/', 'layout');

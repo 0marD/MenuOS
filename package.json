@@ -8,6 +8,8 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:e2e": "pnpm --filter @menuos/web test:e2e",
+    "test:lighthouse": "pnpm --filter @menuos/web test:lighthouse",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\" --ignore-path .gitignore",
     "clean": "turbo run clean && rm -rf node_modules"
   },
