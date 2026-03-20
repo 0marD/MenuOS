@@ -80,7 +80,7 @@ export async function sendPasswordReset(email: string) {
   const supabase = await createClient();
 
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/reset-password`,
+    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/confirm?next=/auth/reset-password`,
   });
 
   if (error) {
@@ -88,4 +88,17 @@ export async function sendPasswordReset(email: string) {
   }
 
   return { success: true };
+}
+
+export async function updatePassword(password: string) {
+  const supabase = await createClient();
+
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    return { error: 'Error al actualizar la contraseña.' };
+  }
+
+  revalidatePath('/', 'layout');
+  redirect('/dashboard');
 }
