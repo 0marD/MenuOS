@@ -4,6 +4,7 @@ import {
   registerSchema,
   pinSchema,
   forgotPasswordSchema,
+  resetPasswordSchema,
 } from '../validations/auth.schema';
 import {
   categorySchema,
@@ -100,6 +101,34 @@ describe('forgotPasswordSchema', () => {
 
   it('rejects invalid email', () => {
     expect(forgotPasswordSchema.safeParse({ email: 'not-email' }).success).toBe(false);
+  });
+});
+
+describe('resetPasswordSchema', () => {
+  const valid = { password: 'NewPass1!', confirmPassword: 'NewPass1!' };
+
+  it('accepts matching strong passwords', () => {
+    expect(resetPasswordSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('rejects mismatched passwords', () => {
+    expect(resetPasswordSchema.safeParse({ ...valid, confirmPassword: 'Different1!' }).success).toBe(false);
+  });
+
+  it('rejects password shorter than 8 chars', () => {
+    expect(resetPasswordSchema.safeParse({ password: 'Ab1!', confirmPassword: 'Ab1!' }).success).toBe(false);
+  });
+
+  it('rejects password without uppercase', () => {
+    expect(resetPasswordSchema.safeParse({ password: 'newpass1!', confirmPassword: 'newpass1!' }).success).toBe(false);
+  });
+
+  it('rejects password without number', () => {
+    expect(resetPasswordSchema.safeParse({ password: 'NewPassword!', confirmPassword: 'NewPassword!' }).success).toBe(false);
+  });
+
+  it('rejects password without symbol', () => {
+    expect(resetPasswordSchema.safeParse({ password: 'NewPass1word', confirmPassword: 'NewPass1word' }).success).toBe(false);
   });
 });
 
