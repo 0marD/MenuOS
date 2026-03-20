@@ -24,20 +24,21 @@ export async function login(data: LoginInput) {
 }
 
 export async function register(data: RegisterInput) {
-  const supabase = await createClient();
+  // Use admin client to create the user, bypassing the SMTP email confirmation
+  // requirement. Restaurant owners are trusted signers — email can be verified
+  // separately via the forgot-password flow once SMTP is stable.
+  const admin = createAdminClient();
 
-  const { data: authData, error: signUpError } = await supabase.auth.signUp({
+  const { data: authData, error: createError } = await admin.auth.admin.createUser({
     email: data.email,
     password: data.password,
+    email_confirm: true,
   });
 
-  if (signUpError || !authData.user) {
-    return { error: signUpError?.message ?? 'Error al crear la cuenta.' };
+  if (createError || !authData.user) {
+    return { error: createError?.message ?? 'Error al crear la cuenta.' };
   }
 
-  // Use admin client to bypass RLS: the new user has no staff_users record yet,
-  // so auth_org_id() returns NULL and all RLS policies would block the inserts.
-  const admin = createAdminClient();
   const slug = generateSlug(data.restaurantName);
 
   const { data: org, error: orgError } = await admin
@@ -64,6 +65,17 @@ export async function register(data: RegisterInput) {
 
   if (staffError) {
     return { error: staffError.message ?? 'Error al configurar el perfil.' };
+  }
+
+  // Sign in the newly created user to establish a session
+  const supabase = await createClient();
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email: data.email,
+    password: data.password,
+  });
+
+  if (signInError) {
+    return { error: 'Cuenta creada. Inicia sesión para continuar.' };
   }
 
   revalidatePath('/', 'layout');
